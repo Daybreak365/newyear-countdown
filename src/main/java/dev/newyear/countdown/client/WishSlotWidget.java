@@ -1,6 +1,5 @@
 package dev.newyear.countdown.client;
 
-import dev.newyear.countdown.mixin.HandledScreenAccessor;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
@@ -21,9 +20,9 @@ public class WishSlotWidget extends ClickableWidget {
 
     @Override
     protected void renderWidget(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        HandledScreenAccessor acc = (HandledScreenAccessor) screen;
-        setX(acc.newyearcountdown$getX() + acc.newyearcountdown$getBackgroundWidth() + 4);
-        setY(acc.newyearcountdown$getY() + 6 + (OmikujiBook.size() > 0 ? 26 : 0));
+        int[] p = InventorySideSlots.pos(screen, OmikujiBook.size() > 0 ? 1 : 0);
+        setX(p[0]);
+        setY(p[1]);
         int x = getX(), y = getY(), s = 22;
         int border = isHovered() ? 0xFFFFE08A : 0xFFB8893A;
         ctx.fill(x, y, x + s, y + s, 0xFF8B8B8B);

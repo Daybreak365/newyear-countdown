@@ -1,6 +1,5 @@
 package dev.newyear.countdown.client;
 
-import dev.newyear.countdown.mixin.HandledScreenAccessor;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
@@ -9,7 +8,7 @@ import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.gui.screen.narration.NarrationMessageBuilder;
 import net.minecraft.text.Text;
 
-/** 인벤토리 화면 오른쪽에 나타나는 오미쿠지 칸. 클릭하면 받아 둔 운세 보관함이 열린다 (한 번도 안 받았으면 나타나지 않는다). */
+/** 인벤토리 화면 옆(InventorySideSlots)에 나타나는 오미쿠지 칸. 클릭하면 받아 둔 운세 보관함이 열린다 (한 번도 안 받았으면 나타나지 않는다). */
 public class OmikujiSlotWidget extends ClickableWidget {
     private final HandledScreen<?> screen;
 
@@ -21,9 +20,9 @@ public class OmikujiSlotWidget extends ClickableWidget {
 
     @Override
     protected void renderWidget(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        HandledScreenAccessor acc = (HandledScreenAccessor) screen;
-        setX(acc.newyearcountdown$getX() + acc.newyearcountdown$getBackgroundWidth() + 4);
-        setY(acc.newyearcountdown$getY() + 6);
+        int[] p = InventorySideSlots.pos(screen, 0);
+        setX(p[0]);
+        setY(p[1]);
         drawSlotFace(ctx, MinecraftClient.getInstance(), getX(), getY(), 22, isHovered(), 0f);
     }
 

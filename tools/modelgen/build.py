@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 ASSETS = os.path.abspath(os.path.join(HERE, '..', '..', 'src', 'main', 'resources', 'assets', 'newyearcountdown'))
 
-import m_bell, m_shrine, m_lantern, m_gacha, m_goods1, m_goods2, m_goods3, entity_textures, armor_texture, capsule_2d, yut_board, goods_2d
+import m_bell, m_shrine, m_lantern, m_gacha, m_goods1, m_goods2, m_goods3, entity_textures, armor_texture, capsule_2d, yut_board, goods_2d, glasses_item
 
 NS = 'newyearcountdown'
 MDIR = os.path.join(ASSETS, 'models', 'item')
@@ -56,7 +56,7 @@ def main():
 
     # ---- 굿즈: 바닐라풍 16x16 2D 스프라이트 (안경만 3D 모델)
     goods_2d.write(ASSETS)
-    put(m_goods1.glasses(), 'goods')
+    glasses_item.write(ASSETS)        # 2027 안경: 착용 텍스처와 같은 모델 (armor_texture 이후)
     yut_board.write(ASSETS)
 
     if preview:
