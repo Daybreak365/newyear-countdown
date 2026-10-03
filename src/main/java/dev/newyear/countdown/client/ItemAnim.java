@@ -27,11 +27,17 @@ public final class ItemAnim {
                 (stack, world, entity, seed) -> capsule(stack, entity));
 
         Identifier fxId = Identifier.of(NewYearCountdown.MOD_ID, "fx");
+        ModelPredicateProviderRegistry.register(Souvenirs.SHEEP_PLUSH, fxId, (stack, world, entity, seed) -> plush(stack, entity));
         for (Souvenirs.Entry e : Souvenirs.ALL) {
             if (e.item() instanceof SouvenirItem s && s.kind() != SouvenirItem.Kind.PLAIN) {
                 ModelPredicateProviderRegistry.register(s, fxId, (stack, world, entity, seed) -> fx(s, stack, entity) / 3f);
             }
         }
+    }
+
+    /** 양 인형(설치 가능한 블록 아이템): 안는 중에 납작하게 눌린 모습. */
+    private static float plush(ItemStack stack, LivingEntity entity) {
+        return using(stack, entity) ? 1f : 0f;
     }
 
     private static boolean using(ItemStack stack, LivingEntity entity) {
@@ -59,20 +65,27 @@ public final class ItemAnim {
         return (color * 4 + state + 0.5f) / 24f;
     }
 
+    /** 쿨다운이 시작된 뒤 지난 틱. (쿨다운 중이 아니면 큰 값) */
+    private static float elapsed(SouvenirItem item, LivingEntity entity) {
+        float cd = cooldown(item, entity);
+        if (cd <= 0f) return Float.MAX_VALUE;
+        return (1f - cd) * item.cooldownTicks();
+    }
+
     private static int fx(SouvenirItem item, ItemStack stack, LivingEntity entity) {
         int age = entity != null ? entity.age : 0;
         int wiggle = 1 + ((age / 2) & 1);       // 2틱마다 번갈아 1, 2
         boolean using = using(stack, entity);
-        float cd = cooldown(item, entity);
+        float el = elapsed(item, entity);
         return switch (item.kind()) {
-            case BELL -> cd > 0f ? wiggle : 0;                       // 딸랑딸랑 좌우로 흔들
-            case POUCH -> cd > 0.75f ? wiggle : (cd > 0f ? 3 : 0);   // 흔든 뒤 입이 열리며 금화가 튄다
-            case PLUSH -> cd > 0.35f ? 3 : 0;                        // 꾹 눌려 납작 + 하트
-            case ENVELOPE -> cd > 0f ? 3 : 0;                        // 열린 봉투와 지폐
-            case CALENDAR -> cd > 0.3f ? 3 : 0;                      // 윗장이 넘어간다
-            case FIRECRACKER -> using ? wiggle : (cd > 0.45f ? 3 : 0); // 심지에 불 → 팡!
-            case CIDER -> using ? wiggle : (cd > 0.5f ? 3 : 0);       // 흔드는 중 → 뻥!
-            case BADGE -> cd > 0.4f ? 3 : 0;                         // 반짝반짝
+            case BELL -> el < 14f ? wiggle : 0;                        // 딸랑딸랑 좌우로 흔들
+            case POUCH -> el < 8f ? wiggle : (el < 20f ? 3 : 0);       // 흔든 뒤 입이 열리며 금화가 튄다
+            case ENVELOPE, CALENDAR, CARD -> el < item.cooldownTicks() ? 3 : 0;   // 열린 봉투 / 넘어가는 달력 / 펼친 카드
+            case FIRECRACKER -> using ? wiggle : (el < 20f ? 3 : 0);   // 심지에 불 → 팡!
+            case CHAMPAGNE -> using ? wiggle : (cooldown(item, entity) > 0f ? 3 : 0);  // 흔드는 중 → 쏴아아
+            case BADGE -> el < 50f ? 3 : 0;                            // 반짝반짝
+            case KITE -> el < 40f ? 3 : 0;                             // 하늘 높이
+            case YUT -> el < 30f ? 3 : 0;                              // 공중에서 도는 윷
             default -> 0;
         };
     }

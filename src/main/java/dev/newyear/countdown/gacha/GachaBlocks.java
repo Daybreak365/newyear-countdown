@@ -29,7 +29,7 @@ public final class GachaBlocks {
             BlockEntityType.Builder.create(GachaMachineBlockEntity::new, GACHA_MACHINE).build(null));
 
     public static final Item GACHA_ITEM = Registry.register(Registries.ITEM,
-            Identifier.of(NewYearCountdown.MOD_ID, "gacha_machine"), new BlockItem(GACHA_MACHINE, new Item.Settings()));
+            Identifier.of(NewYearCountdown.MOD_ID, "gacha_machine"), new GachaMachineItem(GACHA_MACHINE, new Item.Settings()));
 
     public static final Item CAPSULE = Registry.register(Registries.ITEM,
             Identifier.of(NewYearCountdown.MOD_ID, "capsule"), new CapsuleItem(new Item.Settings().maxCount(64)));

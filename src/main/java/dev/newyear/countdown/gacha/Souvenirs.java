@@ -4,6 +4,14 @@ import dev.newyear.countdown.NewYearCountdown;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.block.AbstractBlock;
+import net.minecraft.block.Block;
+import net.minecraft.block.MapColor;
+import net.minecraft.block.piston.PistonBehavior;
+import net.minecraft.component.type.FoodComponent;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.sound.BlockSoundGroup;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ArmorMaterial;
 import net.minecraft.item.Item;
@@ -41,16 +49,31 @@ public final class Souvenirs {
                     List.of(new ArmorMaterial.Layer(id("party_glasses"))), 0f, 0f));
 
     public static final Item GLASSES = add("party_glasses",
-            new ArmorItem(GLASSES_MATERIAL, ArmorItem.Type.HELMET, new Item.Settings().maxCount(1).rarity(Rarity.RARE)), 14);
-    public static final Item LUCKY_POUCH = add("lucky_pouch", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.POUCH), 20);
-    public static final Item SHEEP_PLUSH = add("sheep_plush", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.PLUSH), 15);
+            new ArmorItem(GLASSES_MATERIAL, ArmorItem.Type.HELMET, new Item.Settings().maxCount(1).rarity(Rarity.RARE)), 12);
+    public static final Item LUCKY_POUCH = add("lucky_pouch", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.POUCH), 16);
+
+    /** 설치할 수 있는 양 인형 (블록 + 블록 아이템). */
+    public static final Block SHEEP_PLUSH_BLOCK = Registry.register(Registries.BLOCK, id("sheep_plush"),
+            new SheepPlushBlock(AbstractBlock.Settings.create().mapColor(MapColor.WHITE).strength(0.5f)
+                    .sounds(BlockSoundGroup.WOOL).nonOpaque().pistonBehavior(PistonBehavior.DESTROY)));
+    public static final Item SHEEP_PLUSH = add("sheep_plush", new SheepPlushItem(SHEEP_PLUSH_BLOCK, new Item.Settings()), 13);
+
     public static final Item MINI_BELL = add("mini_bell", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.BELL), 11);
-    public static final Item RED_ENVELOPE = add("red_envelope", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.ENVELOPE), 17);
-    public static final Item MINI_CALENDAR = add("mini_calendar", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.CALENDAR), 19);
-    public static final Item FIRECRACKER = add("firecracker_keychain", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.FIRECRACKER), 13);
-    public static final Item CIDER = add("sparkling_cider", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.CIDER), 13);
-    public static final Item GOLD_BADGE = add("golden_badge", new SouvenirItem(new Item.Settings().rarity(Rarity.EPIC)
+    public static final Item RED_ENVELOPE = add("red_envelope", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.ENVELOPE), 15);
+    public static final Item MINI_CALENDAR = add("mini_calendar", new SouvenirItem(new Item.Settings().maxCount(1), SouvenirItem.Kind.CALENDAR), 15);
+    public static final Item FIRECRACKER = add("firecracker_keychain", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.FIRECRACKER), 12);
+    public static final Item CHAMPAGNE = add("champagne", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.CHAMPAGNE), 11);
+    public static final Item GOLD_BADGE = add("golden_badge", new SouvenirItem(new Item.Settings().rarity(Rarity.EPIC).maxCount(1)
             .component(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true), SouvenirItem.Kind.BADGE), 4);
+
+    public static final Item TTEOKGUK = add("tteokguk", new TteokgukItem(new Item.Settings().maxCount(16).food(
+            new FoodComponent.Builder().nutrition(10).saturationModifier(0.9f).alwaysEdible()
+                    .statusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 20 * 8, 1), 1.0f)
+                    .statusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 20 * 120, 1), 1.0f)
+                    .build())), 14);
+    public static final Item KITE = add("kite", new SouvenirItem(new Item.Settings().maxCount(1).rarity(Rarity.UNCOMMON), SouvenirItem.Kind.KITE), 10);
+    public static final Item YUT_SET = add("yut_set", new SouvenirItem(new Item.Settings().maxCount(1), SouvenirItem.Kind.YUT), 10);
+    public static final Item GREETING_CARD = add("greeting_card", new SouvenirItem(new Item.Settings().maxCount(16), SouvenirItem.Kind.CARD), 13);
 
     private Souvenirs() {}
 
@@ -76,10 +99,15 @@ public final class Souvenirs {
 
     /** 안경을 쓰고 웅크리면 머리 위로 파티 불꽃이 튄다. */
     public static void init() {
+        ChampagneSpray.init();
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (server.getTicks() % 8 != 0) return;
             for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
-                if (!p.isSneaking() || p.isSpectator() || !p.getEquippedStack(EquipmentSlot.HEAD).isOf(GLASSES)) continue;
+                if (p.isSpectator() || !p.getEquippedStack(EquipmentSlot.HEAD).isOf(GLASSES)) continue;
+                if (server.getTicks() % 40 == 0) {   // 쓰고 있는 동안 행운 I (표시 아이콘 없이 조용히 유지)
+                    p.addStatusEffect(new StatusEffectInstance(StatusEffects.LUCK, 20 * 12, 0, true, false, true));
+                }
+                if (!p.isSneaking()) continue;
                 ServerWorld sw = (ServerWorld) p.getWorld();
                 sw.spawnParticles(ParticleTypes.FIREWORK, p.getX(), p.getEyeY() + 0.35, p.getZ(), 3, 0.35, 0.15, 0.35, 0.05);
                 sw.spawnParticles(ParticleTypes.END_ROD, p.getX(), p.getEyeY() + 0.1, p.getZ(), 1, 0.4, 0.2, 0.4, 0.02);

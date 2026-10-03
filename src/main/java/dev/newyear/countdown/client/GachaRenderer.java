@@ -295,6 +295,23 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
         m.pop();
     }
 
+    /** 설치 미리보기 홀로그램(BellPreview): 머신의 큰 덩어리만 단순하게 그린다. */
+    public static void drawGhost(VertexConsumerProvider providers, MatrixStack m, int argb) {
+        BellModel.Painter p = new BellModel.Painter(providers, m, FULL, argb);
+        p.use(T_DARK, WHITE);
+        p.box(-0.47f, 0f, -0.47f, 0.47f, 0.10f, 0.47f);
+        p.use(T_RED, WHITE);
+        p.box(-0.42f, 0.10f, -0.42f, 0.42f, 0.80f, 0.42f);
+        p.use(T_GOLD, WHITE);
+        p.box(-0.45f, 0.80f, -0.45f, 0.45f, 0.92f, 0.45f);
+        p.use(T_WHITE, WHITE);
+        p.box(-0.30f, 0.92f, -0.30f, 0.30f, 1.72f, 0.30f);
+        p.use(T_GOLD, WHITE);
+        p.box(-0.37f, 1.72f, -0.37f, 0.37f, 1.78f, 0.37f);
+        p.use(T_DARK, WHITE);
+        p.box(-0.34f, 1.78f, -0.12f, 0.34f, 2.00f, 0.12f);
+    }
+
     /** 정팔각 단면의 기둥(변마다 얇은 직사각 박스 4개가 중심을 지난다). a = 중심에서 면까지 거리. */
     private static void octagon(BellModel.Painter p, MatrixStack m, float a, float y1, float y2) {
         float b = a * 0.4142f;
