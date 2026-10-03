@@ -7,7 +7,12 @@
     "CameraMixin",
     "HandledScreenAccessor",
     "EntityMixin",
-    "PlayerEntityModelMixin"
+    "PlayerEntityModelMixin",
+    "PlayerModelDataMixin",
+    "ArmorModelDataMixin",
+    "BipedEntityModelMixin",
+    "HeldItemRendererMixin",
+    "PlayerEntityRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
