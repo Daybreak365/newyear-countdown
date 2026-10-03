@@ -326,5 +326,12 @@
   "omikuji.newyearcountdown.line.love.junghyung.3": "믿음을 지키면 관계도 지켜집니다.",
   "omikuji.newyearcountdown.line.love.junghyung.4": "새로운 만남은 천천히 시작하세요.",
   "omikuji.newyearcountdown.kanji.eom": "凶",
-  "omikuji.newyearcountdown.kanji.jwejwe": "大凶"
+  "omikuji.newyearcountdown.kanji.jwejwe": "大凶",
+  "key.newyearcountdown.sebae": "세배하기",
+  "sebae.newyearcountdown.cannot": "지금은 세배할 수 없습니다",
+  "sebae.newyearcountdown.alone": "%s 님이 세배를 합니다. 새해 복 많이 받으세요!",
+  "sebae.newyearcountdown.to": "%s 님이 %s 님께 세배를 드렸습니다. 새해 복 많이 받으세요!",
+  "sebae.newyearcountdown.reward": "세뱃돈: 경험치 +%s",
+  "sebae.newyearcountdown.received": "%s 님에게 세배를 받았습니다 (행운 5분)",
+  "sebae.newyearcountdown.already": "오늘은 이미 %s 님께 세배했습니다"
 }

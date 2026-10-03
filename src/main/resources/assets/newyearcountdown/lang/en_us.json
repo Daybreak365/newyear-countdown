@@ -326,5 +326,12 @@
   "omikuji.newyearcountdown.line.love.junghyung.3": "Keep trust and the relationship holds.",
   "omikuji.newyearcountdown.line.love.junghyung.4": "Start new relationships slowly.",
   "omikuji.newyearcountdown.kanji.eom": "凶",
-  "omikuji.newyearcountdown.kanji.jwejwe": "大凶"
+  "omikuji.newyearcountdown.kanji.jwejwe": "大凶",
+  "key.newyearcountdown.sebae": "Sebae (New Year bow)",
+  "sebae.newyearcountdown.cannot": "You can't bow right now",
+  "sebae.newyearcountdown.alone": "%s bows for the New Year. Happy New Year!",
+  "sebae.newyearcountdown.to": "%s bows to %s. Happy New Year!",
+  "sebae.newyearcountdown.reward": "New Year money: +%s XP",
+  "sebae.newyearcountdown.received": "%s bowed to you (Luck, 5 min)",
+  "sebae.newyearcountdown.already": "You already bowed to %s today"
 }

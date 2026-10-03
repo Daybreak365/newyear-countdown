@@ -33,6 +33,7 @@ import org.lwjgl.glfw.GLFW;
 public class NewYearCountdownClient implements ClientModInitializer {
     private static KeyBinding openSettings;
     private static KeyBinding openWishes;
+    private static KeyBinding sebae;
 
     @Override
     public void onInitializeClient() {
@@ -47,6 +48,7 @@ public class NewYearCountdownClient implements ClientModInitializer {
             OmikujiBook.clear();
             OmikujiHud.sync();
             WishBook.clear();
+            SebaePose.clear();
         });
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> DebugAccess.sendAuth());
 
@@ -122,10 +124,22 @@ public class NewYearCountdownClient implements ClientModInitializer {
         openWishes = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.newyearcountdown.wishes", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN,
                 "key.categories.newyearcountdown"));
+        sebae = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.newyearcountdown.sebae", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_B,
+                "key.categories.newyearcountdown"));
+        ClientPlayNetworking.registerGlobalReceiver(dev.newyear.countdown.sebae.Sebae.StateS2C.ID, (payload, context) -> {
+            if (payload.bowing()) SebaePose.start(payload.player());
+            else SebaePose.stop(payload.player());
+        });
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             CountdownTicker.tick(client);
             while (openWishes.wasPressed()) {
                 if (WishBook.size() > 0 && client.currentScreen == null) client.setScreen(new WishBookScreen());
+            }
+            while (sebae.wasPressed()) {
+                if (client.currentScreen == null && client.player != null) {
+                    ClientPlayNetworking.send(new dev.newyear.countdown.sebae.Sebae.StartC2S());
+                }
             }
             while (openSettings.wasPressed()) {
                 client.setScreen(new SettingsScreen(client.currentScreen));
