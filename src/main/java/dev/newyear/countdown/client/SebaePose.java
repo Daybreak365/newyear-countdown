@@ -16,7 +16,8 @@ import java.util.UUID;
  * 공수한 두 손을 이마로 올림 → 왼 무릎, 오른 무릎 순으로 꿇음 → 발뒤꿈치 위에 앉음 →
  * 두 손을 앞 바닥에 짚고 이마를 손등 가까이 숙임 → 잠시 머묾 → 상체를 들고 손을 이마로 →
  * 오른 무릎부터 세우며 일어남 → 손을 내림.
- * 다리는 한 마디라서, 바닥을 뚫지 않도록 발끝이 바닥에 닿는 길이로 줄여 무릎이 접힌 것처럼 보이게 한다.
+ * 다리는 한 마디라서, 꿇은 다리는 엉덩이에서 앞으로 눕힌 짧은 허벅지(정강이는 그 밑에 접혀 있다고 본다)로,
+ * 아직 서 있는 다리는 발이 바닥에 닿는 길이로 줄여 무릎이 굽은 것처럼 보이게 한다. 엎드릴 때 상체는 허벅지 위로 접힌다.
  * 플레이어 모델은 모든 플레이어가 함께 쓰므로, 절하지 않는 플레이어는 우리가 건드린 값을 기본값으로 되돌린다.
  */
 public final class SebaePose {
@@ -54,19 +55,19 @@ public final class SebaePose {
     }
 
     /** 한 순간의 자세 값 (모델 픽셀, +y 가 아래, -z 가 앞). */
-    private record Frame(float raise, float floor, float drop, float hipZ, float rightLeg, float spine, float headExtra) {}
+    private record Frame(float raise, float floor, float drop, float leftKneel, float rightKneel, float spine, float headExtra) {}
 
     private static Frame frame(float t) {
         float raise = track(t, 0, 0, 10, 1, 106, 1, 116, 0);          // 공수한 손을 이마로
         float floor = track(t, 40, 0, 54, 1, 76, 1, 88, 0);           // 두 손을 바닥에
-        float drop = track(t, 10, 0, 22, 6, 25, 6, 32, 9, 40, 10.5f, 84, 10.5f, 90, 9, 95, 6, 98, 6, 110, 0);
-        float hipZ = track(t, 32, 0, 40, 1.5f, 84, 1.5f, 90, 0);      // 발뒤꿈치 위로 앉으며 엉덩이가 뒤로
-        float rightLeg = track(t, 22, -1, 27, 1, 89, 1, 94, -1);      // -1 무릎 세움(앞), 1 꿇음(뒤)
-        float lean = track(t, 10, 0, 18, 0.22f, 32, 0.05f, 40, 0, 88, 0, 96, 0.28f, 110, 0);
-        float bow = track(t, 40, 0, 56, 1.38f, 74, 1.38f, 88, 0);
+        float drop = track(t, 10, 0, 22, 5, 32, 9, 88, 9, 96, 5, 108, 0);   // 엉덩이를 낮춰 발뒤꿈치 위에 앉음
+        float leftKneel = track(t, 12, 0, 24, 1, 94, 1, 106, 0);      // 왼 무릎 먼저 꿇고, 일어날 땐 나중에
+        float rightKneel = track(t, 20, 0, 32, 1, 88, 1, 96, 0);
+        float lean = track(t, 10, 0, 18, 0.18f, 32, 0.05f, 40, 0, 88, 0, 98, 0.22f, 110, 0);
+        float bow = track(t, 40, 0, 56, 1.32f, 74, 1.32f, 88, 0);
         float breath = t > 58 && t < 74 ? 0.025f * MathHelper.sin((t - 56f) * 0.35f) : 0f;
         float headExtra = 0.18f * raise * (1f - floor) + 0.08f * floor;
-        return new Frame(raise, floor, drop, hipZ, rightLeg, lean + bow + breath, headExtra);
+        return new Frame(raise, floor, drop, leftKneel, rightKneel, lean + bow + breath, headExtra);
     }
 
     private static float age(long start) {
@@ -86,12 +87,12 @@ public final class SebaePose {
         Frame f = frame(age);
         float a = f.spine, hp = a + f.headExtra;
         float neckY = 12f + f.drop - 12f * MathHelper.cos(a);
-        float neckZ = f.hipZ - 12f * MathHelper.sin(a);
+        float neckZ = -12f * MathHelper.sin(a);
         // 눈은 목에서 머리 방향으로 4px
         float eyeY = neckY - 4f * MathHelper.cos(hp);
         float eyeZ = neckZ - 4f * MathHelper.sin(hp);
         float px = 0.9375f / 16f;
-        return new float[]{(eyeY + 4f) * px, -eyeZ * px, MathHelper.clamp(a / 1.38f, 0f, 1f)};
+        return new float[]{(eyeY + 4f) * px, -eyeZ * px, MathHelper.clamp(a / 1.32f, 0f, 1f)};
     }
 
     public static void apply(PlayerEntityModel<?> model, AbstractClientPlayerEntity player) {
@@ -113,7 +114,7 @@ public final class SebaePose {
         float a = f.spine;
         float hipY = 12f + f.drop;
         float neckY = hipY - 12f * MathHelper.cos(a);
-        float neckZ = f.hipZ - 12f * MathHelper.sin(a);
+        float neckZ = -12f * MathHelper.sin(a);
 
         model.body.pivotY = neckY;
         model.body.pivotZ = neckZ;
@@ -141,19 +142,19 @@ public final class SebaePose {
             arm.roll = side * (-0.22f * f.raise * (1f - f.floor) + 0.10f * f.floor);
         }
 
-        // 다리: 발(무릎)이 바닥에 닿는 각도. 왼 무릎은 처음부터 꿇고, 오른 다리는 앞에 세웠다가 따라 꿇는다
-        float knee = (float) Math.acos(MathHelper.clamp((12f - f.drop) / 12f, 0f, 1f));
+        // 다리: 꿇은 다리는 앞으로 눕힌 허벅지(9px), 서 있는 다리는 발이 바닥에 닿도록 줄인다
         for (int side = -1; side <= 1; side += 2) {
             ModelPart leg = side < 0 ? model.rightLeg : model.leftLeg;
-            float pitch = (side < 0 ? f.rightLeg : 1f) * knee;
-            float c = MathHelper.cos(pitch);
+            float w = side < 0 ? f.rightKneel : f.leftKneel;
+            float pitch = -1.45f * w;
+            float c = Math.max(MathHelper.cos(pitch), 0.01f);
             leg.pivotX = 1.9f * side;
             leg.pivotY = hipY;
-            leg.pivotZ = f.hipZ;
+            leg.pivotZ = 0f;
             leg.pitch = pitch;
             leg.yaw = 0f;
             leg.roll = 0f;
-            leg.yScale = c < 0.05f ? 1f : MathHelper.clamp((24f - hipY) / c / 12f, 0.34f, 1f);
+            leg.yScale = MathHelper.clamp((24f - hipY) / c / 12f, 0.25f, MathHelper.lerp(w, 1f, 0.75f));
         }
         model.hat.copyTransform(model.head);
         model.jacket.copyTransform(model.body);
