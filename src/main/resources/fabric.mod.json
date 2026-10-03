@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "newyearcountdown",
+  "version": "${version}",
+  "name": "New Year Countdown",
+  "description": "새해 카운트다운 HUD와 보신각 타종 모드.",
+  "authors": [
+    "새벽"
+  ],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.newyear.countdown.NewYearCountdown"
+    ],
+    "client": [
+      "dev.newyear.countdown.client.NewYearCountdownClient"
+    ],
+    "modmenu": [
+      "dev.newyear.countdown.client.ModMenuIntegration"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  },
+  "mixins": [
+    {
+      "config": "newyearcountdown.mixins.json",
+      "environment": "client"
+    }
+  ]
+}

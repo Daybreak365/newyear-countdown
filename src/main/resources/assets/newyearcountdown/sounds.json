@@ -1,0 +1,71 @@
+{
+  "clock_tick": {
+    "sounds": [
+      {
+        "name": "newyearcountdown:clock_tick",
+        "stream": false
+      }
+    ]
+  },
+  "clock_tock": {
+    "sounds": [
+      {
+        "name": "newyearcountdown:clock_tock",
+        "stream": false
+      }
+    ]
+  },
+  "bell_strike": {
+    "sounds": [
+      {
+        "name": "newyearcountdown:bell_strike",
+        "stream": false,
+        "attenuation_distance": 96
+      }
+    ]
+  },
+  "omikuji_shake": {
+    "sounds": [
+      {
+        "name": "newyearcountdown:omikuji_shake",
+        "stream": false,
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "omikuji_suzu": {
+    "sounds": [
+      {
+        "name": "newyearcountdown:omikuji_suzu",
+        "stream": false,
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "omikuji_reveal": {
+    "sounds": [
+      {
+        "name": "newyearcountdown:omikuji_reveal",
+        "stream": false,
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "omikuji_whoosh": {
+    "sounds": [
+      {
+        "name": "newyearcountdown:omikuji_whoosh",
+        "stream": false
+      }
+    ]
+  },
+  "wish_launch": {
+    "sounds": [
+      {
+        "name": "newyearcountdown:wish_launch",
+        "stream": false,
+        "attenuation_distance": 32
+      }
+    ]
+  }
+}

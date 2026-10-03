@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "newyearcountdown:item/capsule_top",
+    "layer1": "newyearcountdown:item/capsule_bottom"
+  }
+}

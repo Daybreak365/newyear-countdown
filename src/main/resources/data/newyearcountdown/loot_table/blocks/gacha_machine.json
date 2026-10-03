@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "newyearcountdown:gacha_machine",
+          "conditions": [
+            {
+              "condition": "minecraft:block_state_property",
+              "block": "newyearcountdown:gacha_machine",
+              "properties": {
+                "half": "lower"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
