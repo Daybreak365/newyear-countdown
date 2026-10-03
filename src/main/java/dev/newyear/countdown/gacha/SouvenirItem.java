@@ -458,7 +458,7 @@ public class SouvenirItem extends Item {
         if (hit > 0) p.sendMessage(Text.translatable("item.newyearcountdown.firecracker_keychain.hit", hit).formatted(Formatting.GOLD), true);
     }
 
-    private static void popChampagne(ServerWorld sw, ServerPlayerEntity p, float power) {
+    private void popChampagne(ServerWorld sw, ServerPlayerEntity p, float power) {
         Vec3d mouth = p.getEyePos().add(p.getRotationVec(1.0f).multiply(0.7)).add(0, -0.2, 0);
         sw.playSound(null, mouth.x, mouth.y, mouth.z, SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST, SoundCategory.PLAYERS, 1.1f, 0.7f + (1f - power) * 0.4f);
         sw.playSound(null, mouth.x, mouth.y, mouth.z, SoundEvents.BLOCK_BEEHIVE_EXIT, SoundCategory.PLAYERS, 1.0f, 1.6f);
