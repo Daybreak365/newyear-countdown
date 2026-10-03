@@ -82,7 +82,7 @@ public final class OmikujiPaper {
         // 번호
         centered(ctx, tr, Text.translatable("omikuji.newyearcountdown.ui.number", e.number), 0, y0 + 51, 0.85f, a(0xFF6B4F2A, alpha), false);
 
-        // 운세 이름 + 한자 (엄..., 줴줴이야~! 는 한자 없음)
+        // 운세 이름 + 한자
         Text name = Text.translatable("omikuji.newyearcountdown.name." + f.key()).formatted(Formatting.BOLD);
         int nw = tr.getWidth(name);
         float nameScale = Math.min(main ? 3.0f : 2.6f, (W - 20) / (float) Math.max(1, nw));   // 긴 이름은 종이 폭에 맞춰 줄인다

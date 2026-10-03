@@ -108,7 +108,7 @@ public class OmikujiBlockEntity extends BlockEntity {
             case "jungil", "sokil" -> sw.spawnParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 24, 0.7, 0.4, 0.7, 0.0);
             case "malgil" -> sw.spawnParticles(ParticleTypes.END_ROD, x, y, z, 14, 0.5, 0.3, 0.5, 0.02);
             case "pyeongta" -> sw.spawnParticles(ParticleTypes.CHERRY_LEAVES, x, y + 0.5, z, 30, 0.9, 0.4, 0.9, 0.0);
-            case "jwejwe" -> { // 최악
+            case "jwejwe" -> { // 대흉
                 sw.spawnParticles(ParticleTypes.SOUL, x, y, z, 20, 0.5, 0.3, 0.5, 0.03);
                 sw.spawnParticles(ParticleTypes.LARGE_SMOKE, x, y, z, 16, 0.5, 0.2, 0.5, 0.02);
             }
