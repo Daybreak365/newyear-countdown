@@ -8,7 +8,7 @@ import net.minecraft.util.math.MathHelper;
 
 /**
  * 뽑은 운세를 보여 주는 화면. 종이가 펼쳐지고 "받기" 를 누르거나 화면을 닫으면
- * 종이가 인벤토리 옆 오미쿠지 칸으로 날아가 보관함에 들어간다.
+ * 종이가 화면 아래 인벤토리(핫바) 쪽으로 빨려 들어간다. 다시 보려면 인벤토리의 오미쿠지 칸을 누른다.
  */
 public class OmikujiResultScreen extends Screen {
     private final OmikujiBook.Entry entry;

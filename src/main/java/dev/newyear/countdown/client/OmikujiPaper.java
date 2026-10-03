@@ -23,6 +23,10 @@ public final class OmikujiPaper {
             0xFFC8962A, 0xFFD2691E, 0xFF3E8E41, 0xFF5A5A5A, 0xFF3B6EA5, 0xFFB03030, 0xFF5A1010,
     };
     private static final int INK = 0xFF3A2C1A;
+    /** 운세별 별 개수 (Fortunes.ALL 순서). */
+    private static final int[] STARS = {5, 4, 3, 3, 2, 1, 0};
+    /** 분야(소원/재물/연애)마다 운세별로 준비된 문구 수. lang: omikuji.newyearcountdown.line.<분야>.<운세>.<0~N-1> */
+    public static final int LINE_VARIANTS = 5;
 
     private OmikujiPaper() {}
 
@@ -69,7 +73,7 @@ public final class OmikujiPaper {
         ctx.fill(x0 + 8, y0 + 8, x1 - 8, y0 + 32, a(frame, alpha));
         ctx.fill(x0 + 8, y0 + 31, x1 - 8, y0 + 32, a(accent, alpha));
         ctx.fill(x0 + 8, y0 + 8, x1 - 8, y0 + 9, a(accent, alpha));
-        Text head = main ? Text.literal("御 神 籤") : Text.literal("追 加 籤");
+        Text head = Text.translatable(main ? "omikuji.newyearcountdown.ui.head.main" : "omikuji.newyearcountdown.ui.head.extra");
         centered(ctx, tr, head, 0, y0 + 11, 1.4f, a(headText, alpha), true);
 
         // 구분 표시: 첫 뽑기 / 추가 뽑기 N회차
@@ -83,11 +87,12 @@ public final class OmikujiPaper {
         // 번호
         centered(ctx, tr, Text.translatable("omikuji.newyearcountdown.ui.number", e.number), 0, y0 + 51, 0.85f, a(0xFF6B4F2A, alpha), false);
 
-        // 운세 이름 + 한자
+        // 운세 이름 + 별점(대길 5개 ~ 대흉 0개)
         Text name = Text.translatable("omikuji.newyearcountdown.name." + f.key()).formatted(Formatting.BOLD);
         centered(ctx, tr, name, 0, y0 + 62, main ? 3.0f : 2.6f, a(fc, alpha), main);
-        Text kanji = Text.translatable("omikuji.newyearcountdown.kanji." + f.key());
-        centered(ctx, tr, kanji, 0, y0 + 90, 1.5f, a(fc, alpha), false);
+        int stars = STARS[Math.floorMod(e.result, STARS.length)];
+        Text rating = Text.literal("★".repeat(stars) + "☆".repeat(5 - stars));
+        centered(ctx, tr, rating, 0, y0 + 90, 1.0f, a(fc, alpha), false);
         int ly = y0 + 102;
         ctx.fill(x0 + 14, ly, -24, ly + 1, a(accent, alpha));
         ctx.fill(24, ly, x1 - 14, ly + 1, a(accent, alpha));
@@ -108,7 +113,7 @@ public final class OmikujiPaper {
             ctx.fill(x0 + 10, ry, x0 + 38, ry + 12, a(frame, alpha));
             int cw = tr.getWidth(catName);
             ctx.drawText(tr, catName, x0 + 24 - cw / 2, ry + 2, a(0xFFFBEFD0, alpha), false);
-            Text line = Text.translatable("omikuji.newyearcountdown.line." + cat + "." + f.key());
+            Text line = Text.translatable("omikuji.newyearcountdown.line." + cat + "." + f.key() + "." + variant(e, cat));
             int ly2 = ry + 1;
             for (OrderedText l : tr.wrapLines(line, W - 56)) {
                 ctx.drawText(tr, l, x0 + 44, ly2, a(INK, alpha), false);
@@ -126,13 +131,21 @@ public final class OmikujiPaper {
         if (main) {
             ctx.fill(-10, -10, 10, 10, a(0xFFB33030, alpha));
             ctx.drawBorder(-8, -8, 16, 16, a(0xFFF3D98A, alpha));
-            centered(ctx, tr, Text.literal("福"), 0, -6, 1.1f, a(0xFFF8E8C0, alpha), false);
+            centered(ctx, tr, Text.literal("복"), 0, -6, 1.1f, a(0xFFF8E8C0, alpha), false);
         } else { // 추가 뽑기는 작은 둥근 느낌의 청회색 도장
             ctx.fill(-8, -8, 8, 8, a(0xFF4F6F7C, alpha));
             ctx.drawBorder(-7, -7, 14, 14, a(0xFFDDE8EC, alpha));
-            centered(ctx, tr, Text.literal("追"), 0, -5, 0.95f, a(0xFFEAF2F4, alpha), false);
+            centered(ctx, tr, Text.literal("추"), 0, -5, 0.95f, a(0xFFEAF2F4, alpha), false);
         }
         ctx.getMatrices().pop();
+    }
+
+    /** 종이마다 고정된 무작위 문구 번호: 같은 종이는 언제 다시 봐도 같은 문구가 나온다. */
+    private static int variant(OmikujiBook.Entry e, String cat) {
+        long h = e.time * 31L + e.number * 1_000_003L + cat.hashCode() * 7919L;
+        h ^= (h >>> 17);
+        h *= 0x9E3779B97F4A7C15L;
+        return (int) Math.floorMod(h >>> 33, (long) LINE_VARIANTS);
     }
 
     private static void centered(DrawContext ctx, TextRenderer tr, Text t, int cx, int y, float scale, int color, boolean shadow) {

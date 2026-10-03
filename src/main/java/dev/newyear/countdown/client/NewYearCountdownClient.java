@@ -32,7 +32,6 @@ import org.lwjgl.glfw.GLFW;
 
 public class NewYearCountdownClient implements ClientModInitializer {
     private static KeyBinding openSettings;
-    private static KeyBinding openOmikuji;
     private static KeyBinding openWishes;
 
     @Override
@@ -120,9 +119,6 @@ public class NewYearCountdownClient implements ClientModInitializer {
         openSettings = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.newyearcountdown.settings", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN,
                 "key.categories.newyearcountdown"));
-        openOmikuji = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.newyearcountdown.omikuji", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN,
-                "key.categories.newyearcountdown"));
         openWishes = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.newyearcountdown.wishes", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN,
                 "key.categories.newyearcountdown"));
@@ -130,9 +126,6 @@ public class NewYearCountdownClient implements ClientModInitializer {
             CountdownTicker.tick(client);
             while (openWishes.wasPressed()) {
                 if (WishBook.size() > 0 && client.currentScreen == null) client.setScreen(new WishBookScreen());
-            }
-            while (openOmikuji.wasPressed()) {
-                if (OmikujiBook.size() > 0 && client.currentScreen == null) client.setScreen(new OmikujiBookScreen());
             }
             while (openSettings.wasPressed()) {
                 client.setScreen(new SettingsScreen(client.currentScreen));
