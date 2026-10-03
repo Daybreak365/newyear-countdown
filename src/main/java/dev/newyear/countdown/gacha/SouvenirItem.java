@@ -39,21 +39,20 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 새해 굿즈. 종류(Kind)마다 실제로 쓸모 있는 효과가 있다. (양 인형은 설치되는 블록 아이템이라 SheepPlushItem)
+ * 새해 굿즈. 종류(Kind)마다 효과가 다르다.
  *
  * - 복주머니(소모): 열면 전리품 + 행운 10분
- * - 보신각 종(30초 쿨다운): 근처 아군에게 재생·신속 축복, 몬스터는 겁먹고 둔해지며 표적을 놓친다
  * - 세뱃돈 봉투(소모): 열면 금액에 비례한 경험치
  * - 2027 미니 달력: 하루 한 번 출석 체크(연속 출석일 보상) + 새해까지 D-day
  * - 폭죽 키링(소모): 꾹 눌러 불을 붙이고 던지듯 터뜨리면 앞의 몬스터에게 피해·넉백·발광
- * - 새해 샴페인(소모): 꾹 흔들수록 세게, 쏴아아 거품이 앞으로 뿜어져(ChampagneSpray) 불을 끄고 몬스터를 밀어낸다
+ * - 새해 샴페인(소모): 흔든 만큼 세게 거품을 분사(ChampagneSpray). 불을 끄고 몬스터를 밀어낸다
  * - 황금 배지(5분 쿨다운): 황금빛 축복 = 흡수 + 재생 + 저항
  * - 방패연(30초): 하늘이 열린 곳에서 연처럼 떠올라 천천히 내려온다
  * - 덕담 카드(소모): 다른 플레이어에게 우클릭하면 둘 다 행운 + 재생, 혼자 쓰면 행운
  * 모델 쪽 상태 전환(흔들림/열림/불꽃 등)은 클라이언트 ItemAnim 이 쿨다운·사용 상태를 보고 고른다.
  */
 public class SouvenirItem extends Item {
-    public enum Kind { PLAIN, POUCH, BELL, ENVELOPE, CALENDAR, FIRECRACKER, CHAMPAGNE, BADGE, KITE, CARD }
+    public enum Kind { PLAIN, POUCH, ENVELOPE, CALENDAR, FIRECRACKER, CHAMPAGNE, BADGE, KITE, CARD }
 
     /** 폭죽 심지가 타는 시간 / 샴페인을 최대로 흔드는 시간(틱). */
     public static final int FUSE_TICKS = 24;
@@ -82,7 +81,6 @@ public class SouvenirItem extends Item {
     public int cooldownTicks() {
         return switch (kind) {
             case POUCH -> 20;
-            case BELL -> 600;
             case ENVELOPE -> 26;
             case CALENDAR -> 24;
             case BADGE -> 6000;
@@ -111,7 +109,6 @@ public class SouvenirItem extends Item {
                 if (world instanceof ServerWorld sw && user instanceof ServerPlayerEntity sp) {
                     switch (kind) {
                         case POUCH -> openPouch(sw, sp, stack);
-                        case BELL -> ringBell(sw, sp);
                         case ENVELOPE -> openEnvelope(sw, sp, stack);
                         case CALENDAR -> checkIn(sw, sp, stack);
                         case BADGE -> blessing(sw, sp);
@@ -261,31 +258,6 @@ public class SouvenirItem extends Item {
         if (roll < 86) return new ItemStack(Items.GOLDEN_CARROT, 3 + r.nextInt(3));
         if (roll < 95) return new ItemStack(Items.GOLDEN_APPLE, 1);
         return new ItemStack(Items.DIAMOND, 1 + r.nextInt(2));
-    }
-
-    /** 새해 종소리 축복: 반경 16 안의 플레이어(자신 포함)는 재생·신속, 반경 12 안의 몬스터는 겁먹는다. */
-    private static void ringBell(ServerWorld sw, ServerPlayerEntity p) {
-        float pitch = 0.9f + sw.random.nextFloat() * 0.3f;
-        sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.BLOCK_BELL_USE, SoundCategory.PLAYERS, 1.4f, pitch);
-        sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.BLOCK_BELL_RESONATE, SoundCategory.PLAYERS, 0.9f, pitch);
-        sw.spawnParticles(ParticleTypes.NOTE, p.getX(), p.getEyeY() + 0.3, p.getZ(), 6, 0.8, 0.4, 0.8, 0.6);
-        sw.spawnParticles(ParticleTypes.END_ROD, p.getX(), p.getY() + 0.2, p.getZ(), 24, 1.2, 0.1, 1.2, 0.03);
-        int blessed = 0;
-        for (ServerPlayerEntity o : sw.getPlayers(pl -> pl.squaredDistanceTo(p) <= 16 * 16)) {
-            o.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 20 * 8, 1));
-            o.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 20 * 30, 0));
-            blessed++;
-        }
-        int scared = 0;
-        Box box = p.getBoundingBox().expand(12);
-        for (HostileEntity h : sw.getEntitiesByClass(HostileEntity.class, box, e -> true)) {
-            h.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 20 * 8, 2));
-            h.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 20 * 8, 0));
-            h.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 20 * 8, 0));
-            ((MobEntity) h).setTarget(null);
-            scared++;
-        }
-        p.sendMessage(Text.translatable("item.newyearcountdown.mini_bell.rung", blessed, scared).formatted(Formatting.GOLD), true);
     }
 
     private static void openEnvelope(ServerWorld sw, ServerPlayerEntity p, ItemStack stack) {

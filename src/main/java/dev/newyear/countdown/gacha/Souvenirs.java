@@ -53,13 +53,6 @@ public final class Souvenirs {
             new ArmorItem(GLASSES_MATERIAL, ArmorItem.Type.HELMET, new Item.Settings().maxCount(1).rarity(Rarity.RARE)), 12);
     public static final Item LUCKY_POUCH = add("lucky_pouch", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.POUCH), 16);
 
-    /** 설치할 수 있는 양 인형 (블록 + 블록 아이템). */
-    public static final Block SHEEP_PLUSH_BLOCK = Registry.register(Registries.BLOCK, id("sheep_plush"),
-            new SheepPlushBlock(AbstractBlock.Settings.create().mapColor(MapColor.WHITE).strength(0.5f)
-                    .sounds(BlockSoundGroup.WOOL).nonOpaque().pistonBehavior(PistonBehavior.DESTROY)));
-    public static final Item SHEEP_PLUSH = add("sheep_plush", new SheepPlushItem(SHEEP_PLUSH_BLOCK, new Item.Settings()), 13);
-
-    public static final Item MINI_BELL = add("mini_bell", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.BELL), 11);
     public static final Item RED_ENVELOPE = add("red_envelope", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.ENVELOPE), 15);
     public static final Item MINI_CALENDAR = add("mini_calendar", new SouvenirItem(new Item.Settings().maxCount(1), SouvenirItem.Kind.CALENDAR), 15);
     public static final Item FIRECRACKER = add("firecracker_keychain", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.FIRECRACKER), 12);

@@ -27,17 +27,11 @@ public final class ItemAnim {
                 (stack, world, entity, seed) -> capsule(stack, entity));
 
         Identifier fxId = Identifier.of(NewYearCountdown.MOD_ID, "fx");
-        ModelPredicateProviderRegistry.register(Souvenirs.SHEEP_PLUSH, fxId, (stack, world, entity, seed) -> plush(stack, entity));
         for (Souvenirs.Entry e : Souvenirs.ALL) {
             if (e.item() instanceof SouvenirItem s && s.kind() != SouvenirItem.Kind.PLAIN) {
                 ModelPredicateProviderRegistry.register(s, fxId, (stack, world, entity, seed) -> fx(s, stack, entity) / 3f);
             }
         }
-    }
-
-    /** 양 인형(설치 가능한 블록 아이템): 안는 중에 납작하게 눌린 모습. */
-    private static float plush(ItemStack stack, LivingEntity entity) {
-        return using(stack, entity) ? 1f : 0f;
     }
 
     private static boolean using(ItemStack stack, LivingEntity entity) {
@@ -78,7 +72,6 @@ public final class ItemAnim {
         boolean using = using(stack, entity);
         float el = elapsed(item, entity);
         return switch (item.kind()) {
-            case BELL -> el < 14f ? wiggle : 0;                        // 딸랑딸랑 좌우로 흔들
             case POUCH -> el < 8f ? wiggle : (el < 20f ? 3 : 0);       // 흔든 뒤 입이 열리며 금화가 튄다
             case ENVELOPE, CALENDAR, CARD -> el < item.cooldownTicks() ? 3 : 0;   // 열린 봉투 / 넘어가는 달력 / 펼친 카드
             case FIRECRACKER -> using ? wiggle : (el < 20f ? 3 : 0);   // 심지에 불 → 팡!

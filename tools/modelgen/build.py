@@ -63,16 +63,6 @@ def main():
     pouch.write_variant(ASSETS, 'lucky_pouch_b', 'lucky_pouch', roll=-10)
     add_overrides('lucky_pouch', [(0.3, 'lucky_pouch_a'), (0.6, 'lucky_pouch_b'), (0.9, 'lucky_pouch_open')])
 
-    sheep = put(m_goods3.sheep(), 'goods')
-    put(m_goods3.sheep(True).like(sheep), 'goods_state')
-    sheep.write_block(ASSETS, 'sheep_plush')          # 설치할 수 있는 인형 블록 모델
-    add_overrides('sheep_plush', [(0.9, 'sheep_plush_squish')])
-
-    bell = put(m_goods3.mini_bell(), 'goods')
-    bell.write_variant(ASSETS, 'mini_bell_a', 'mini_bell', roll=16)
-    bell.write_variant(ASSETS, 'mini_bell_b', 'mini_bell', roll=-16)
-    add_overrides('mini_bell', [(0.3, 'mini_bell_a'), (0.6, 'mini_bell_b'), (0.9, 'mini_bell_a')])
-
     env = put(m_goods2.envelope(), 'goods')
     put(m_goods2.envelope(True).like(env), 'goods_state')
     add_overrides('red_envelope', [(0.9, 'red_envelope_open')])

@@ -17,7 +17,7 @@ def gold_gradient(w, h, top='#fff2a6', mid='#f0b92a', bot='#9c6a0a'):
     return Image.fromarray(arr.astype(np.uint8), 'RGB').convert('RGBA')
 
 
-def lens(txt=None, w=28, h=34):
+def lens(txt=None, w=28, h=24):
     """속이 뚫린 렌즈: 금 프레임만 그리고 유리 부분은 완전 투명(캐릭터 눈이 보인다). 갑옷 레이어는 반투명이 안 되므로 알파 0/255 만 쓴다."""
     W, H = w * SS, h * SS
     img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
@@ -37,7 +37,7 @@ def lens(txt=None, w=28, h=34):
     d.rounded_rectangle([t - SS // 2, t - SS // 2, W - 1 - t + SS // 2, H - 1 - t + SS // 2], radius=r - t // 2, outline=(120, 76, 8, 255), width=SS)
     # 2027 숫자: 속이 빈 두꺼운 윤곽선 글자 (눈이 글자 안/사이로 보인다)
     if txt:
-        f = ImageFont.truetype(FONT, int(21 * SS))
+        f = ImageFont.truetype(FONT, int(17 * SS))
         mask_t = Image.new('L', (W, H), 0)
         ImageDraw.Draw(mask_t).text((W / 2, H / 2 + 1 * SS), txt, font=f, fill=255, anchor='mm')
         grow = mask_t.filter(ImageFilter.MaxFilter(int(2.2 * SS) // 2 * 2 + 1))
@@ -66,14 +66,14 @@ def star(d, cx, cy, R, fill):
 def build(path):
     sheet = Image.new('RGBA', (512, 256), (0, 0, 0, 0))
     # 앞면: 렌즈 둘 + 브리지
-    sheet.alpha_composite(lens('20'), (66, 79))
-    sheet.alpha_composite(lens('27'), (98, 79))
+    sheet.alpha_composite(lens('20'), (66, 84))
+    sheet.alpha_composite(lens('27'), (98, 84))
     d = ImageDraw.Draw(sheet)
     bridge = gold_gradient(8, 8).resize((8, 8))
-    sheet.alpha_composite(bridge, (92, 90))
-    sheet.alpha_composite(bridge.resize((8, 6)), (92, 106))
+    sheet.alpha_composite(bridge, (92, 91))
+    sheet.alpha_composite(bridge.resize((8, 6)), (92, 103))
     # 코받침
-    d.ellipse([95, 112, 99, 118], fill=(240, 185, 42, 255))
+    d.ellipse([95, 108, 99, 113], fill=(240, 185, 42, 255))
     # 옆(오른쪽 x0..64, 왼쪽 x128..192): 다리(템플) + 힌지 + 별
     for (x0, hinge_x, flip) in ((0, 56, False), (128, 0, True)):
         arm = gold_gradient(64, 9)

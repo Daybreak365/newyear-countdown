@@ -53,23 +53,26 @@ public class YutBoardRenderer implements BlockEntityRenderer<YutBoardBlockEntity
         m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-be.getCachedState().get(YutBoardBlock.FACING).asRotation()));
         BellModel.Painter p = new BellModel.Painter(providers, m, light, 0);
 
+        // 판은 3x3 블록: 판 기준 좌표(0~1)를 블록 단위로 바꾼다
+        final float B = 3f;
+
         // ---- 말 ----
         int[] stack = new int[YutBoardBlockEntity.POINTS.length];
         for (int i = 0; i < be.pieces.length; i++) {
             int idx = be.pieces[i];
             if (idx < 0 || idx >= stack.length) continue;
-            float px = YutBoardBlockEntity.POINTS[idx][0] - 0.5f;
-            float pz = YutBoardBlockEntity.POINTS[idx][1] - 0.5f;
+            float px = (YutBoardBlockEntity.POINTS[idx][0] - 0.5f) * B;
+            float pz = (YutBoardBlockEntity.POINTS[idx][1] - 0.5f) * B;
             int k = stack[idx]++;
             boolean picked = i == be.hilite;
-            float y = TOP + k * 0.075f + (picked ? 0.07f + 0.015f * MathHelper.sin(time * 0.35f) : 0f);
+            float y = TOP + k * 0.15f + (picked ? 0.14f + 0.03f * MathHelper.sin(time * 0.35f) : 0f);
             Identifier tex = i < 4 ? T_RED : T_BLUE;
             if (picked) p.lightOverride = FULL;
             p.use(tex, WHITE);
-            p.box(px - 0.05f, y, pz - 0.05f, px + 0.05f, y + 0.045f, pz + 0.05f);
-            p.box(px - 0.036f, y + 0.045f, pz - 0.036f, px + 0.036f, y + 0.078f, pz + 0.036f);
+            p.box(px - 0.10f, y, pz - 0.10f, px + 0.10f, y + 0.09f, pz + 0.10f);
+            p.box(px - 0.072f, y + 0.09f, pz - 0.072f, px + 0.072f, y + 0.16f, pz + 0.072f);
             p.use(picked ? T_WHITE : tex, picked ? 0xFFFFF0A0 : 0xFFDDDDDD);
-            p.box(px - 0.02f, y + 0.078f, pz - 0.02f, px + 0.02f, y + 0.092f, pz + 0.02f);
+            p.box(px - 0.04f, y + 0.16f, pz - 0.04f, px + 0.04f, y + 0.19f, pz + 0.04f);
             p.lightOverride = -1;
         }
 
@@ -81,22 +84,22 @@ public class YutBoardRenderer implements BlockEntityRenderer<YutBoardBlockEntity
             for (int i = 0; i < 4; i++) {
                 boolean flatUp = (be.sticks >> i & 1) != 0;
                 // 착지 위치/방향: 가락마다 조금씩 다르게(결정적)
-                float landX = (i * 7 % 5 - 2) * 0.014f;
-                float landZ = THROW_Z0 + i * 0.052f - 0.5f;
+                float landX = (i * 7 % 5 - 2) * 0.05f;
+                float landZ = (THROW_Z0 + i * 0.05f - 0.5f) * B;
                 float yaw = (i * 11 % 5 - 2) * 4f;
-                float x = landX, y = TOP + 0.014f, z = landZ, spin = 0f, ys = yaw;
+                float x = landX, y = TOP + 0.03f, z = landZ, spin = 0f, ys = yaw;
                 if (flying && t < 1f) {
                     float u = ease(t);
                     float turns = 1 + ((be.animStart + i * 3) % 3);
                     float arc = 4f * t * (1f - t);
-                    x = MathHelper.lerp(u, (i - 1.5f) * 0.03f, landX);
-                    z = MathHelper.lerp(u, 0.05f, landZ);      // 판 중앙 위쪽에서 던져 앞쪽 자리로
-                    y = TOP + 0.014f + 0.5f * arc;
+                    x = MathHelper.lerp(u, (i - 1.5f) * 0.1f, landX);
+                    z = MathHelper.lerp(u, 0.1f, landZ);        // 판 가운데 위쪽에서 던져 앞쪽 자리로
+                    y = TOP + 0.03f + 1.1f * arc;
                     spin = (1f - u) * 360f * turns;
                     ys = yaw + (1f - u) * (i % 2 == 0 ? 90f : -70f);
                 } else if (flying) {
                     float b = (age - YutBoardBlockEntity.THROW_TICKS) / 8f;   // 착지 후 짧은 통통 튐
-                    y += 0.035f * Math.abs(MathHelper.sin(b * (float) Math.PI * 2f)) * (1f - b);
+                    y += 0.08f * Math.abs(MathHelper.sin(b * (float) Math.PI * 2f)) * (1f - b);
                 }
                 m.push();
                 m.translate(x, y, z);
@@ -104,9 +107,9 @@ public class YutBoardRenderer implements BlockEntityRenderer<YutBoardBlockEntity
                 m.multiply(RotationAxis.POSITIVE_X.rotationDegrees(spin + (flatUp ? 0f : 180f)));
                 // 위쪽 절반 = 평평한 밝은 면, 아래쪽 절반 = 둥근 어두운 면 (뒤집히면 어두운 면이 위)
                 p.use(T_ROUND, WHITE);
-                p.box(-0.16f, -0.014f, -0.022f, 0.16f, 0f, 0.022f);
+                p.box(-0.40f, -0.03f, -0.05f, 0.40f, 0f, 0.05f);
                 p.use(T_FLAT, WHITE);
-                p.box(-0.16f, 0f, -0.022f, 0.16f, 0.014f, 0.022f);
+                p.box(-0.40f, 0f, -0.05f, 0.40f, 0.03f, 0.05f);
                 m.pop();
             }
         }
@@ -114,5 +117,5 @@ public class YutBoardRenderer implements BlockEntityRenderer<YutBoardBlockEntity
     }
 
     /** 던지는 자리 첫 가락의 z (판 기준 0~1). */
-    private static final float THROW_Z0 = 0.775f;
+    private static final float THROW_Z0 = 0.79f;
 }

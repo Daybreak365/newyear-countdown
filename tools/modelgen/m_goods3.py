@@ -71,7 +71,7 @@ def sheep(squish=False):
 
 # ------------------------------------------------------------------ 새해 축하 샴페인
 def champagne(state=0):
-    """state: 0 기본 / 1 흔드는 중(거품) / 2 뻥! (코르크 날아가고 거품이 앞으로 쏴아아)"""
+    """state: 0 기본 / 1 흔드는 중(거품) / 2 분사 (코르크 날아가고 거품이 앞으로)"""
     B = []
     glass = '#1d3f2a'
     gl = lambda: Mat(glass, base=b_vgrad('#2a5a3a', '#12301e'), shape=('cylY', 8, 8), spec=1.0, shin=22, bevel=0.0, noise=0.006, ambient=0.72, diffuse=0.44)
@@ -113,7 +113,7 @@ def champagne(state=0):
         sparkle(B, 4.0, 12.0, 9.4, 0.8, '#ffffff')
     if state == 2:
         foam = lambda c: Mat('#ffffff', base=b_wool('#ffffff', 0.9), shape=('sphere', c, (1, 1, 1)), spec=0.5, bevel=0.0, noise=0.01, ambient=0.86, diffuse=0.25)
-        # 병목에서 앞(+z)으로 쏴아아: 점점 퍼지는 거품 줄기
+        # 병목에서 앞(+z)으로 점점 퍼지는 거품 줄기
         for i, (fy, fz, r) in enumerate(((14.0, 8.0, 1.2), (14.4, 9.6, 1.4), (14.6, 11.4, 1.5), (14.5, 13.2, 1.3), (14.0, 14.8, 1.0))):
             B.extend(sphere(8, fy, fz, r, lambda i_, *a, _c=(8, fy, fz): foam(_c), step=0.5, sides=8))
         for (dx, dy, dz) in ((6.4, 14.6, 10.4), (9.8, 15.0, 11.0), (7.0, 13.6, 13.6), (9.2, 14.0, 14.4), (5.8, 15.4, 12.2), (10.6, 14.2, 12.6)):

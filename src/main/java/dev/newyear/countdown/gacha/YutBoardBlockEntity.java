@@ -32,10 +32,10 @@ import java.util.UUID;
  */
 public class YutBoardBlockEntity extends BlockEntity {
     public static final int THROW_TICKS = 20;
-    /** 판 기준 좌표(0~1)에서 이 값보다 앞(+z)이면 던지는 자리. */
-    public static final double THROW_Z = 0.725;
+    /** 판(3x3 전체를 0~1) 기준 좌표에서 이 값보다 앞(+z)이면 던지는 자리(붉은 양털). */
+    public static final double THROW_Z = 34.0 / 48.0;
 
-    /** 29점의 좌표 {lx, lz} (0~1). tools/modelgen/yut_board.py 의 points() 와 같은 공식. */
+    /** 29점의 좌표 {lx, lz} (3x3 전체를 0~1). tools/modelgen/yut_board.py 의 points() 와 같은 공식. */
     public static final float[][] POINTS = buildPoints();
 
     public final int[] pieces = {-1, -1, -1, -1, -1, -1, -1, -1};   // 점 번호, -1 = 판 밖
@@ -56,7 +56,7 @@ public class YutBoardBlockEntity extends BlockEntity {
     }
 
     private static float[][] buildPoints() {
-        float x0 = 3f / 16, x1 = 13f / 16, z0 = 1f / 16, z1 = 11f / 16;
+        float x0 = 9f / 48, x1 = 39f / 48, z0 = 3f / 48, z1 = 33f / 48;
         float[][] corners = {{x1, z1}, {x1, z0}, {x0, z0}, {x0, z1}};
         List<float[]> l = new ArrayList<>();
         for (int i = 0; i < 4; i++) {
@@ -139,7 +139,7 @@ public class YutBoardBlockEntity extends BlockEntity {
                 best = i;
             }
         }
-        if (best < 0 || bestD > 0.075 * 0.075) {
+        if (best < 0 || bestD > 0.06 * 0.06) {
             if (selected.remove(p.getUuid()) != null) {   // 점 밖을 누르면 선택 취소
                 hilite = -1;
                 sync();
@@ -180,7 +180,7 @@ public class YutBoardBlockEntity extends BlockEntity {
             selected.remove(p.getUuid());
             hilite = -1;
             sw.playSound(null, pos, SoundEvents.BLOCK_WOOD_PLACE, SoundCategory.BLOCKS, 0.8f, 1.3f);
-            sw.spawnParticles(ParticleTypes.CRIT, pos.getX() + POINTS[idx][0], pos.getY() + 0.2, pos.getZ() + POINTS[idx][1], 4, 0.05, 0.03, 0.05, 0.02);
+            sw.spawnParticles(ParticleTypes.CRIT, pos.getX() + 0.5 + (POINTS[idx][0] - 0.5) * 3, pos.getY() + 0.25, pos.getZ() + 0.5 + (POINTS[idx][1] - 0.5) * 3, 4, 0.05, 0.03, 0.05, 0.02);
             sync();
             p.sendMessage(Text.translatable("yut.newyearcountdown.moved", teamName(sel / 4)).formatted(Formatting.GREEN), true);
             return;
@@ -267,7 +267,7 @@ public class YutBoardBlockEntity extends BlockEntity {
             o.sendMessage(msg, false);
         }
         double cx = pos.getX() + 0.5, cy = pos.getY() + 0.25, cz = pos.getZ() + 0.5;
-        sw.spawnParticles(again ? ParticleTypes.TOTEM_OF_UNDYING : ParticleTypes.HAPPY_VILLAGER, cx, cy + 0.2, cz + 0.25, again ? 16 : 6, 0.3, 0.1, 0.2, again ? 0.2 : 0.0);
+        sw.spawnParticles(again ? ParticleTypes.TOTEM_OF_UNDYING : ParticleTypes.HAPPY_VILLAGER, cx, cy + 0.2, cz + 1.2, again ? 16 : 6, 0.3, 0.1, 0.2, again ? 0.2 : 0.0);
         sw.playSound(null, pos, again ? SoundEvents.ENTITY_PLAYER_LEVELUP : SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, SoundCategory.BLOCKS, 0.9f, again ? 1.5f : 1.3f);
     }
 }

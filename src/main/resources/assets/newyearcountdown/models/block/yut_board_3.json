@@ -1,0 +1,77 @@
+{
+ "textures": {
+  "top": "newyearcountdown:block/yut_board",
+  "side": "minecraft:block/dark_oak_planks",
+  "particle": "minecraft:block/dark_oak_planks"
+ },
+ "elements": [
+  {
+   "from": [
+    0,
+    0,
+    0
+   ],
+   "to": [
+    16,
+    2,
+    16
+   ],
+   "faces": {
+    "up": {
+     "uv": [
+      0.0,
+      5.3333,
+      5.3333,
+      10.6667
+     ],
+     "texture": "#top"
+    },
+    "down": {
+     "uv": [
+      0,
+      0,
+      16,
+      16
+     ],
+     "texture": "#side"
+    },
+    "north": {
+     "uv": [
+      0,
+      14,
+      16,
+      16
+     ],
+     "texture": "#side"
+    },
+    "south": {
+     "uv": [
+      0,
+      14,
+      16,
+      16
+     ],
+     "texture": "#side"
+    },
+    "east": {
+     "uv": [
+      0,
+      14,
+      16,
+      16
+     ],
+     "texture": "#side"
+    },
+    "west": {
+     "uv": [
+      0,
+      14,
+      16,
+      16
+     ],
+     "texture": "#side"
+    }
+   }
+  }
+ ]
+}
