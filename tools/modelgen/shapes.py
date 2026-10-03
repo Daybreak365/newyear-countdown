@@ -132,3 +132,24 @@ def profile_layers(points, step=0.45, y_start=None):
         out.append((y, y2, a))
         y = y2
     return out
+
+
+def ring(cx, cz, y1, y2, a_out, t, mat, sides=16, floor=None):
+    """속이 빈 다각 링(그릇 벽). 변마다 얇은 판 하나를 중심에서 a_out 만큼 떨어뜨려 놓는다."""
+    out = []
+    R = a_out / math.cos(math.pi / sides)
+    b = R * math.sin(math.pi / sides) + 0.02
+    d = a_out - t / 2
+    for k in range(sides):
+        phi = k * 360.0 / sides
+        phi0 = round(phi / 90.0) * 90 % 360
+        r = phi - round(phi / 90.0) * 90
+        vx, vz = {0: (1, 0), 90: (0, 1), 180: (-1, 0), 270: (0, -1)}[int(phi0)]
+        px, pz = cx + vx * d, cz + vz * d
+        if vx != 0:
+            lo, hi = (px - t / 2, pz - b), (px + t / 2, pz + b)
+        else:
+            lo, hi = (px - b, pz - t / 2), (px + b, pz + t / 2)
+        rot = ('y', r, (cx, 0, cz)) if r else None
+        out.append(Box((lo[0], y1, lo[1]), (hi[0], y2, hi[1]), mat, rot=rot))
+    return out

@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 ASSETS = os.path.abspath(os.path.join(HERE, '..', '..', 'src', 'main', 'resources', 'assets', 'newyearcountdown'))
 
-import m_bell, m_shrine, m_lantern, m_gacha, m_capsule, m_goods1, m_goods2, entity_textures, armor_texture
+import m_bell, m_shrine, m_lantern, m_gacha, m_capsule, m_goods1, m_goods2, m_goods3, entity_textures, armor_texture
 
 NS = 'newyearcountdown'
 MDIR = os.path.join(ASSETS, 'models', 'item')
@@ -74,8 +74,9 @@ def main():
     pouch.write_variant(ASSETS, 'lucky_pouch_b', 'lucky_pouch', roll=-10)
     add_overrides('lucky_pouch', [(0.3, 'lucky_pouch_a'), (0.6, 'lucky_pouch_b'), (0.9, 'lucky_pouch_open')])
 
-    sheep = put(m_goods1.sheep(), 'goods')
-    put(m_goods1.sheep(True).like(sheep), 'goods_state')
+    sheep = put(m_goods3.sheep(), 'goods')
+    put(m_goods3.sheep(True).like(sheep), 'goods_state')
+    sheep.write_block(ASSETS, 'sheep_plush')          # 설치할 수 있는 인형 블록 모델
     add_overrides('sheep_plush', [(0.9, 'sheep_plush_squish')])
 
     bell = put(m_goods1.mini_bell(), 'goods')
@@ -98,12 +99,23 @@ def main():
     lit.write_variant(ASSETS, 'firecracker_keychain_lit_b', 'firecracker_keychain_lit', roll=-6)
     add_overrides('firecracker_keychain', [(0.3, 'firecracker_keychain_lit_a'), (0.6, 'firecracker_keychain_lit_b'), (0.9, 'firecracker_keychain_burst')])
 
-    cid = put(m_goods2.cider(0), 'goods')
-    shk = put(m_goods2.cider(1).like(cid), 'goods_state')
-    put(m_goods2.cider(2).like(cid), 'goods_state')
-    shk.write_variant(ASSETS, 'sparkling_cider_a', 'sparkling_cider_shake', roll=8)
-    shk.write_variant(ASSETS, 'sparkling_cider_b', 'sparkling_cider_shake', roll=-8)
-    add_overrides('sparkling_cider', [(0.3, 'sparkling_cider_a'), (0.6, 'sparkling_cider_b'), (0.9, 'sparkling_cider_pop')])
+    cid = put(m_goods3.champagne(0), 'goods')
+    shk = put(m_goods3.champagne(1).like(cid), 'goods_state')
+    put(m_goods3.champagne(2).like(cid), 'goods_state')
+    shk.write_variant(ASSETS, 'champagne_a', 'champagne_shake', roll=8)
+    shk.write_variant(ASSETS, 'champagne_b', 'champagne_shake', roll=-8)
+    add_overrides('champagne', [(0.3, 'champagne_a'), (0.6, 'champagne_b'), (0.9, 'champagne_pop')])
+
+    put(m_goods3.tteokguk(), 'goods')
+    kt = put(m_goods3.kite(), 'goods')
+    put(m_goods3.kite(True).like(kt), 'goods_state')
+    add_overrides('kite', [(0.9, 'kite_fly')])
+    yt = put(m_goods3.yut(), 'goods')
+    put(m_goods3.yut(True).like(yt), 'goods_state')
+    add_overrides('yut_set', [(0.9, 'yut_set_thrown')])
+    cd = put(m_goods3.card(), 'goods')
+    put(m_goods3.card(True).like(cd), 'goods_state')
+    add_overrides('greeting_card', [(0.9, 'greeting_card_open')])
 
     bd = put(m_goods2.badge(), 'goods')
     put(m_goods2.badge(True).like(bd), 'goods_state')

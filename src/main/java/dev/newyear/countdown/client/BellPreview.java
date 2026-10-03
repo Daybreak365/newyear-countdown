@@ -2,6 +2,8 @@ package dev.newyear.countdown.client;
 
 import dev.newyear.countdown.bell.BellLayout;
 import dev.newyear.countdown.bell.ModBlocks;
+import dev.newyear.countdown.gacha.GachaBlocks;
+import dev.newyear.countdown.gacha.GachaMachineItem;
 import dev.newyear.countdown.omikuji.OmikujiBlocks;
 import dev.newyear.countdown.omikuji.OmikujiLayout;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
@@ -31,12 +33,13 @@ public final class BellPreview {
 
     private BellPreview() {}
 
-    /** 들고 있는 설치 아이템: 0 없음, 1 보신각, 2 오미쿠지 뽑기대. */
+    /** 들고 있는 설치 아이템: 0 없음, 1 보신각, 2 오미쿠지 뽑기대, 3 가챠 머신. */
     private static int holding(MinecraftClient mc) {
         for (Hand h : Hand.values()) {
             ItemStack s = mc.player.getStackInHand(h);
             if (s.isOf(ModBlocks.BOSINGAK_BELL_ITEM)) return 1;
             if (s.isOf(OmikujiBlocks.OMIKUJI_ITEM)) return 2;
+            if (s.isOf(GachaBlocks.GACHA_ITEM)) return 3;
         }
         return 0;
     }
@@ -54,7 +57,8 @@ public final class BellPreview {
 
         long now = mc.world.getTime();
         if (cachePos == null || kind != cacheKind || !cachePos.equals(place) || cacheFacing != facing || now != cacheTick) {
-            cacheValid = kind == 1 ? BellLayout.canPlace(mc.world, place, facing) : OmikujiLayout.canPlace(mc.world, place, facing);
+            cacheValid = kind == 1 ? BellLayout.canPlace(mc.world, place, facing)
+                    : kind == 2 ? OmikujiLayout.canPlace(mc.world, place, facing) : GachaMachineItem.canPlace(mc.world, place);
             cachePos = place.toImmutable();
             cacheFacing = facing;
             cacheTick = now;
@@ -70,7 +74,9 @@ public final class BellPreview {
         m.translate(place.getX() + 0.5 - cam.x, place.getY() - cam.y, place.getZ() + 0.5 - cam.z);
         m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-facing.asRotation()));
         int argb = cacheValid ? OK : BAD;
-        if (kind == 1) BellModel.drawGhost(providers, m, argb); else OmikujiModel.drawGhost(providers, m, argb);
+        if (kind == 1) BellModel.drawGhost(providers, m, argb);
+        else if (kind == 2) OmikujiModel.drawGhost(providers, m, argb);
+        else GachaRenderer.drawGhost(providers, m, argb);
         m.pop();
     }
 }

@@ -235,6 +235,28 @@ class Model:
             'head': {'rotation': [0, 0, 0], 'translation': [0, 14, 0], 'scale': [0.9] * 3},
         }
 
+    def write_block(self, assets, block_name, dy=0.0):
+        """같은 형상을 블록 모델(models/block)로도 출력한다 (놓을 수 있는 인형 등). write() 이후에 호출."""
+        els = []
+        for bi, box in enumerate(self.boxes):
+            el = {'from': [round(box.a[0], 4), round(box.a[1] + dy, 4), round(box.a[2], 4)],
+                  'to': [round(box.b[0], 4), round(box.b[1] + dy, 4), round(box.b[2], 4)]}
+            if box.rot:
+                axis, ang, org = box.rot
+                el['rotation'] = {'angle': ang, 'axis': axis, 'origin': [round(org[0], 4), round(org[1] + dy, 4), round(org[2], 4)]}
+            faces = {}
+            for f in box.faces:
+                x, y, w, h = self.pos[(bi, f)]
+                faces[f] = {'uv': [round(v, 4) for v in (x * 16 / self.size, y * 16 / self.size, (x + w) * 16 / self.size, (y + h) * 16 / self.size)], 'texture': '#0'}
+            el['faces'] = faces
+            els.append(el)
+        tex = f'newyearcountdown:item/model/{self.name}'
+        data = {'textures': {'0': tex, 'particle': tex}, 'elements': els}
+        d = os.path.join(assets, 'models', 'block')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, block_name + '.json'), 'w') as fh:
+            json.dump(data, fh, separators=(',', ':'))
+
     def write_variant(self, assets, name, parent, roll=0.0):
         """같은 형상(parent)에 표시 변환만 다른 변형 (흔들림 등). 텍스처는 공유한다."""
         mdir = os.path.join(assets, 'models', 'item')

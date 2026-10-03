@@ -17,39 +17,31 @@ def gold_gradient(w, h, top='#fff2a6', mid='#f0b92a', bot='#9c6a0a'):
     return Image.fromarray(arr.astype(np.uint8), 'RGB').convert('RGBA')
 
 
-def lens(txt, w=28, h=34):
+def lens(txt=None, w=28, h=34):
+    """속이 뚫린 렌즈: 금 프레임만 그리고 유리 부분은 완전 투명(캐릭터 눈이 보인다). 갑옷 레이어는 반투명이 안 되므로 알파 0/255 만 쓴다."""
     W, H = w * SS, h * SS
     img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     r = 7 * SS
     mask = Image.new('L', (W, H), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, W - 1, H - 1], radius=r, fill=255)
-    # 금 프레임
+    hole = Image.new('L', (W, H), 0)
+    t = 3 * SS
+    ImageDraw.Draw(hole).rounded_rectangle([t, t, W - 1 - t, H - 1 - t], radius=r - t // 2, fill=255)
+    ring = Image.eval(mask, lambda v: v)
+    ring.paste(0, (0, 0), hole)                     # 프레임 = 바깥 - 안쪽
     fr = gold_gradient(W, H)
-    img.paste(fr, (0, 0), mask)
-    # 유리
-    inner = Image.new('L', (W, H), 0)
-    t = 4 * SS
-    ImageDraw.Draw(inner).rounded_rectangle([t, t, W - 1 - t, H - 1 - t], radius=r - t // 2, fill=255)
-    ys = np.linspace(0, 1, H)[:, None, None]
-    xs = np.linspace(0, 1, W)[None, :, None]
-    top = np.array([190, 235, 255.0]); bot = np.array([70, 150, 225.0])
-    glass = top * (1 - ys) + bot * ys
-    glass = glass * (1 - 0.18 * xs)
-    g = Image.fromarray(np.broadcast_to(glass, (H, W, 3)).astype(np.uint8), 'RGB').convert('RGBA')
-    g.putalpha(inner.point(lambda v: int(v * 0.86)))
-    img = Image.alpha_composite(img, g)
+    img.paste(fr, (0, 0), ring)
     d = ImageDraw.Draw(img)
-    # 반사 줄무늬
-    d.line([(5 * SS, H - 8 * SS), (13 * SS, 7 * SS)], fill=(255, 255, 255, 150), width=3 * SS)
-    d.line([(10 * SS, H - 7 * SS), (15 * SS, 14 * SS)], fill=(255, 255, 255, 90), width=2 * SS)
-    # 숫자
-    f = ImageFont.truetype(FONT, int(19 * SS))
-    d.text((W / 2, H / 2 + 1 * SS), txt, font=f, fill='#fff3a8', anchor='mm', stroke_width=int(1.6 * SS), stroke_fill='#8a5a06')
-    d.text((W / 2, H / 2), txt, font=f, fill='#f6c945', anchor='mm')
-    # 프레임 하이라이트
-    d.rounded_rectangle([1 * SS, 1 * SS, W - 2 * SS, H - 2 * SS], radius=r - SS, outline=(255, 250, 200, 200), width=SS)
+    # 프레임 안팎 하이라이트/그림자
+    d.rounded_rectangle([1 * SS, 1 * SS, W - 2 * SS, H - 2 * SS], radius=r - SS, outline=(255, 250, 200, 255), width=SS)
     d.rounded_rectangle([t - SS // 2, t - SS // 2, W - 1 - t + SS // 2, H - 1 - t + SS // 2], radius=r - t // 2, outline=(120, 76, 8, 255), width=SS)
-    return img.resize((w, h), Image.LANCZOS)
+    # 유리 반사 줄무늬: 불투명한 얇은 흰 선 두 줄만 (눈을 가리지 않게 가장자리 쪽)
+    d.line([(t + 1 * SS, H - t - 4 * SS), (t + 5 * SS, t + 5 * SS)], fill=(255, 255, 255, 255), width=SS)
+    d.line([(t + 3 * SS, H - t - 2 * SS), (t + 6 * SS, t + 12 * SS)], fill=(220, 240, 255, 255), width=SS)
+    out = img.resize((w, h), Image.LANCZOS)
+    a = np.array(out)
+    a[..., 3] = np.where(a[..., 3] > 110, 255, 0)   # 알파를 0/255 로 이진화 (컷아웃)
+    return Image.fromarray(a, 'RGBA')
 
 
 def star(d, cx, cy, R, fill):
@@ -64,8 +56,8 @@ def star(d, cx, cy, R, fill):
 def build(path):
     sheet = Image.new('RGBA', (512, 256), (0, 0, 0, 0))
     # 앞면: 렌즈 둘 + 브리지
-    sheet.alpha_composite(lens('20'), (66, 79))
-    sheet.alpha_composite(lens('27'), (98, 79))
+    sheet.alpha_composite(lens(), (66, 79))
+    sheet.alpha_composite(lens(), (98, 79))
     d = ImageDraw.Draw(sheet)
     bridge = gold_gradient(8, 8).resize((8, 8))
     sheet.alpha_composite(bridge, (92, 90))
@@ -81,7 +73,8 @@ def build(path):
         hx = x0 + hinge_x
         d.rectangle([hx, 84, hx + 7, 101], fill=(166, 112, 10, 255))
         d.rectangle([hx + 1, 85, hx + 6, 88], fill=(255, 236, 140, 255))
-        star(d, x0 + 30, 92, 7, (255, 244, 170, 255))
+        f = ImageFont.truetype(FONT, 9)
+        d.text((x0 + 32, 92), '2027', font=f, fill=(110, 66, 6, 255), anchor='mm')
     # 뒤쪽: 얇은 스트랩 + 작은 별
     strap = gold_gradient(64, 6, '#e8c860', '#c89a20', '#7a5208')
     sheet.alpha_composite(strap, (192, 90))

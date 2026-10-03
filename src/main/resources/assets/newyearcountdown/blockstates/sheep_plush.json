@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=south": { "model": "newyearcountdown:block/sheep_plush" },
+    "facing=west": { "model": "newyearcountdown:block/sheep_plush", "y": 90 },
+    "facing=north": { "model": "newyearcountdown:block/sheep_plush", "y": 180 },
+    "facing=east": { "model": "newyearcountdown:block/sheep_plush", "y": 270 }
+  }
+}
