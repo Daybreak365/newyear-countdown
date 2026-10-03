@@ -75,9 +75,9 @@ public class OmikujiBlockEntity extends BlockEntity {
 
     private void reveal(ServerWorld sw) {
         Fortunes.Fortune f = Fortunes.get(result);
-        sw.playSound(null, pos, ModSounds.OMIKUJI_REVEAL, SoundCategory.BLOCKS, 1.0f, result >= 5 ? 0.7f : 1.0f);
-        if (result == 0) sw.playSound(null, pos, SoundEvents.ENTITY_FIREWORK_ROCKET_TWINKLE, SoundCategory.BLOCKS, 1.0f, 1.0f);
-        if (result == Fortunes.ALL.length - 1) sw.playSound(null, pos, SoundEvents.ENTITY_WITHER_AMBIENT, SoundCategory.BLOCKS, 0.4f, 1.6f);
+        sw.playSound(null, pos, ModSounds.OMIKUJI_REVEAL, SoundCategory.BLOCKS, 1.0f, f.tier() < 0 ? 0.7f : 1.0f);
+        if (f.tier() == 2) sw.playSound(null, pos, SoundEvents.ENTITY_FIREWORK_ROCKET_TWINKLE, SoundCategory.BLOCKS, 1.0f, 1.0f);
+        if (f.tier() == -2) sw.playSound(null, pos, SoundEvents.ENTITY_WITHER_AMBIENT, SoundCategory.BLOCKS, 0.4f, 1.6f);
 
         spawnParticles(sw);
 
@@ -90,7 +90,7 @@ public class OmikujiBlockEntity extends BlockEntity {
                 .add(p.getUuid(), result, 1 + sw.getRandom().nextInt(100), System.currentTimeMillis());
         ServerPlayNetworking.send(p, new OmikujiPackets.ResultS2C(saved.result, saved.number, saved.time));
 
-        if (result == 0) { // 대길은 서버 전체에 알린다
+        if (f.tier() == 2) { // 대길은 서버 전체에 알린다
             sw.getServer().getPlayerManager().broadcast(
                     Text.translatable("omikuji.newyearcountdown.broadcast", p.getDisplayName(), name), false);
         }
@@ -99,19 +99,20 @@ public class OmikujiBlockEntity extends BlockEntity {
     /** 결과에 맞는 파티클 연출 (서버가 뿌리면 근처 모두에게 보인다). */
     private void spawnParticles(ServerWorld sw) {
         double x = pos.getX() + 0.5, y = pos.getY() + 2.9, z = pos.getZ() + 0.5;
-        switch (result) {
-            case 0 -> { // 대길: 황금빛 폭죽
+        Fortunes.Fortune f = Fortunes.get(result);
+        switch (f.key()) {
+            case "daekil" -> { // 대길: 황금빛 폭죽
                 sw.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 50, 0.5, 0.3, 0.5, 0.4);
                 sw.spawnParticles(ParticleTypes.END_ROD, x, y + 0.3, z, 30, 0.8, 0.5, 0.8, 0.05);
             }
-            case 1, 2 -> sw.spawnParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 24, 0.7, 0.4, 0.7, 0.0);
-            case 3 -> sw.spawnParticles(ParticleTypes.CHERRY_LEAVES, x, y + 0.5, z, 30, 0.9, 0.4, 0.9, 0.0);
-            case 4 -> sw.spawnParticles(ParticleTypes.END_ROD, x, y, z, 14, 0.5, 0.3, 0.5, 0.02);
-            case 5 -> sw.spawnParticles(ParticleTypes.SMOKE, x, y, z, 20, 0.4, 0.2, 0.4, 0.02);
-            default -> { // 대흉
+            case "jungil", "sokil" -> sw.spawnParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 24, 0.7, 0.4, 0.7, 0.0);
+            case "malgil" -> sw.spawnParticles(ParticleTypes.END_ROD, x, y, z, 14, 0.5, 0.3, 0.5, 0.02);
+            case "pyeongta" -> sw.spawnParticles(ParticleTypes.CHERRY_LEAVES, x, y + 0.5, z, 30, 0.9, 0.4, 0.9, 0.0);
+            case "jwejwe" -> { // 최악
                 sw.spawnParticles(ParticleTypes.SOUL, x, y, z, 20, 0.5, 0.3, 0.5, 0.03);
                 sw.spawnParticles(ParticleTypes.LARGE_SMOKE, x, y, z, 16, 0.5, 0.2, 0.5, 0.02);
             }
+            default -> sw.spawnParticles(ParticleTypes.SMOKE, x, y, z, 20, 0.4, 0.2, 0.4, 0.02);   // 흉 계열
         }
     }
 }

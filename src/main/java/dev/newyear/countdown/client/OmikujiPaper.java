@@ -19,19 +19,14 @@ import java.util.Date;
 public final class OmikujiPaper {
     public static final int W = 148, H = 232;
 
-    private static final int[] FORTUNE_COLOR = {
-            0xFFC8962A, 0xFFD2691E, 0xFF3E8E41, 0xFF5A5A5A, 0xFF3B6EA5, 0xFFB03030, 0xFF5A1010,
-    };
     private static final int INK = 0xFF3A2C1A;
-    /** 운세별 별 개수 (Fortunes.ALL 순서). */
-    private static final int[] STARS = {5, 4, 3, 3, 2, 1, 0};
     /** 분야(소원/재물/연애)마다 운세별로 준비된 문구 수. lang: omikuji.newyearcountdown.line.<분야>.<운세>.<0~N-1> */
     public static final int LINE_VARIANTS = 5;
 
     private OmikujiPaper() {}
 
     public static int fortuneColor(int result) {
-        return FORTUNE_COLOR[Math.floorMod(result, FORTUNE_COLOR.length)];
+        return Fortunes.get(result).paper();
     }
 
     private static int a(int argb, float alpha) {
@@ -87,12 +82,15 @@ public final class OmikujiPaper {
         // 번호
         centered(ctx, tr, Text.translatable("omikuji.newyearcountdown.ui.number", e.number), 0, y0 + 51, 0.85f, a(0xFF6B4F2A, alpha), false);
 
-        // 운세 이름 + 별점(대길 5개 ~ 대흉 0개)
+        // 운세 이름 + 한자 (엄..., 줴줴이야~! 는 한자 없음)
         Text name = Text.translatable("omikuji.newyearcountdown.name." + f.key()).formatted(Formatting.BOLD);
-        centered(ctx, tr, name, 0, y0 + 62, main ? 3.0f : 2.6f, a(fc, alpha), main);
-        int stars = STARS[Math.floorMod(e.result, STARS.length)];
-        Text rating = Text.literal("★".repeat(stars) + "☆".repeat(5 - stars));
-        centered(ctx, tr, rating, 0, y0 + 90, 1.0f, a(fc, alpha), false);
+        int nw = tr.getWidth(name);
+        float nameScale = Math.min(main ? 3.0f : 2.6f, (W - 20) / (float) Math.max(1, nw));   // 긴 이름은 종이 폭에 맞춰 줄인다
+        centered(ctx, tr, name, 0, y0 + 62 + (int) ((3.0f - nameScale) * 4), nameScale, a(fc, alpha), main);
+        if (f.kanji()) {
+            Text kanji = Text.translatable("omikuji.newyearcountdown.kanji." + f.key());
+            centered(ctx, tr, kanji, 0, y0 + 90, 1.5f, a(fc, alpha), false);
+        }
         int ly = y0 + 102;
         ctx.fill(x0 + 14, ly, -24, ly + 1, a(accent, alpha));
         ctx.fill(24, ly, x1 - 14, ly + 1, a(accent, alpha));
@@ -131,11 +129,11 @@ public final class OmikujiPaper {
         if (main) {
             ctx.fill(-10, -10, 10, 10, a(0xFFB33030, alpha));
             ctx.drawBorder(-8, -8, 16, 16, a(0xFFF3D98A, alpha));
-            centered(ctx, tr, Text.literal("복"), 0, -6, 1.1f, a(0xFFF8E8C0, alpha), false);
+            centered(ctx, tr, Text.literal("福"), 0, -6, 1.1f, a(0xFFF8E8C0, alpha), false);
         } else { // 추가 뽑기는 작은 둥근 느낌의 청회색 도장
             ctx.fill(-8, -8, 8, 8, a(0xFF4F6F7C, alpha));
             ctx.drawBorder(-7, -7, 14, 14, a(0xFFDDE8EC, alpha));
-            centered(ctx, tr, Text.literal("추"), 0, -5, 0.95f, a(0xFFEAF2F4, alpha), false);
+            centered(ctx, tr, Text.literal("追"), 0, -5, 0.95f, a(0xFFEAF2F4, alpha), false);
         }
         ctx.getMatrices().pop();
     }
