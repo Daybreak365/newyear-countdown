@@ -37,11 +37,12 @@ import java.util.UUID;
  * 앞에 있는 플레이어를 바라보고 절하면 "세배"가 되어, 절한 사람은 경험치(세뱃돈), 받은 사람은 행운(덕담)을 얻는다
  * (같은 상대에게는 하루 한 번). 절하는 도중 움직이면 멈춘다.
  *
- * 타임라인(틱): 0~10 무릎 꿇기, 10~22 엎드리기, 22~40 그대로, 40~50 일어나 앉기, 50~60 일어서기.
+ * 타임라인(틱): 0~10 손을 이마로, 10~40 무릎 꿇고 앉기, 40~56 엎드리기, 56~76 그대로, 76~88 상체 들기,
+ * 88~110 일어서기, 106~116 손 내리기. 자세는 클라이언트 SebaePose.
  */
 public final class Sebae {
-    public static final int TOTAL = 60;
-    public static final int BOW_AT = 22;
+    public static final int TOTAL = 120;
+    public static final int BOW_AT = 56;
     private static final int XP_REWARD = 30;
 
     /** 클라이언트 → 서버: 세배하기. */
