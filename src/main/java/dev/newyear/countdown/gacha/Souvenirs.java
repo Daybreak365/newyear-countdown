@@ -1,6 +1,9 @@
 package dev.newyear.countdown.gacha;
 
 import dev.newyear.countdown.NewYearCountdown;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ArmorMaterial;
 import net.minecraft.item.Item;
@@ -8,6 +11,10 @@ import net.minecraft.recipe.Ingredient;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.particle.ParticleTypes;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Rarity;
@@ -35,14 +42,15 @@ public final class Souvenirs {
 
     public static final Item GLASSES = add("party_glasses",
             new ArmorItem(GLASSES_MATERIAL, ArmorItem.Type.HELMET, new Item.Settings().maxCount(1).rarity(Rarity.RARE)), 14);
-    public static final Item LUCKY_POUCH = add("lucky_pouch", new SouvenirItem(new Item.Settings(), false), 20);
-    public static final Item SHEEP_PLUSH = add("sheep_plush", new SouvenirItem(new Item.Settings(), false), 15);
-    public static final Item MINI_BELL = add("mini_bell", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), true), 11);
-    public static final Item RED_ENVELOPE = add("red_envelope", new SouvenirItem(new Item.Settings(), false), 17);
-    public static final Item MINI_CALENDAR = add("mini_calendar", new SouvenirItem(new Item.Settings(), false), 19);
-    public static final Item FIRECRACKER = add("firecracker_keychain", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), true), 13);
-    public static final Item CIDER = add("sparkling_cider", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), true), 13);
-    public static final Item GOLD_BADGE = add("golden_badge", new SouvenirItem(new Item.Settings().rarity(Rarity.EPIC), false), 4);
+    public static final Item LUCKY_POUCH = add("lucky_pouch", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.POUCH), 20);
+    public static final Item SHEEP_PLUSH = add("sheep_plush", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.PLUSH), 15);
+    public static final Item MINI_BELL = add("mini_bell", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.BELL), 11);
+    public static final Item RED_ENVELOPE = add("red_envelope", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.ENVELOPE), 17);
+    public static final Item MINI_CALENDAR = add("mini_calendar", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.CALENDAR), 19);
+    public static final Item FIRECRACKER = add("firecracker_keychain", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.FIRECRACKER), 13);
+    public static final Item CIDER = add("sparkling_cider", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.CIDER), 13);
+    public static final Item GOLD_BADGE = add("golden_badge", new SouvenirItem(new Item.Settings().rarity(Rarity.EPIC)
+            .component(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true), SouvenirItem.Kind.BADGE), 4);
 
     private Souvenirs() {}
 
@@ -66,5 +74,19 @@ public final class Souvenirs {
         return ALL.get(0).item();
     }
 
-    public static void init() {}
+    /** 안경을 쓰고 웅크리면 머리 위로 파티 불꽃이 튄다. */
+    public static void init() {
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (server.getTicks() % 8 != 0) return;
+            for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
+                if (!p.isSneaking() || p.isSpectator() || !p.getEquippedStack(EquipmentSlot.HEAD).isOf(GLASSES)) continue;
+                ServerWorld sw = (ServerWorld) p.getWorld();
+                sw.spawnParticles(ParticleTypes.FIREWORK, p.getX(), p.getEyeY() + 0.35, p.getZ(), 3, 0.35, 0.15, 0.35, 0.05);
+                sw.spawnParticles(ParticleTypes.END_ROD, p.getX(), p.getEyeY() + 0.1, p.getZ(), 1, 0.4, 0.2, 0.4, 0.02);
+                if (server.getTicks() % 40 == 0) {
+                    sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ENTITY_FIREWORK_ROCKET_TWINKLE, SoundCategory.PLAYERS, 0.5f, 1.4f);
+                }
+            }
+        });
+    }
 }

@@ -212,6 +212,7 @@ public final class BellModel {
         int color = WHITE;
         int lightOverride = -1; // 0 이상이면 이 밝기로 그린다(등불 등 발광)
         boolean translucent;    // true 면 반투명 레이어(색의 알파 사용)
+        boolean fullUv;         // true 면 면 하나에 텍스처 전체(0~1)를 입힌다 (작은 부품에 전용 텍스처를 쓸 때)
         VertexConsumer vc;
 
         Painter(VertexConsumerProvider providers, MatrixStack m, int light, int ghost) {
@@ -303,6 +304,13 @@ public final class BellModel {
                           float ux, float uy, float uz, float lu,
                           float vx, float vy, float vz, float lv,
                           float nx, float ny, float nz, boolean rotate) {
+            if (fullUv) {
+                vertex(e, ox, oy, oz, 0f, 1f, rotate, nx, ny, nz);
+                vertex(e, ox + vx * lv, oy + vy * lv, oz + vz * lv, 0f, 0f, rotate, nx, ny, nz);
+                vertex(e, ox + ux * lu + vx * lv, oy + uy * lu + vy * lv, oz + uz * lu + vz * lv, 1f, 0f, rotate, nx, ny, nz);
+                vertex(e, ox + ux * lu, oy + uy * lu, oz + uz * lu, 1f, 1f, rotate, nx, ny, nz);
+                return;
+            }
             for (float s = 0; s < lu - 1e-4f; s += 1f) {
                 float su = Math.min(1f, lu - s);
                 for (float t = 0; t < lv - 1e-4f; t += 1f) {
