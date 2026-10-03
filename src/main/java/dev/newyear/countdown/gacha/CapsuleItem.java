@@ -109,6 +109,7 @@ public class CapsuleItem extends Item {
 
         Item prize = Souvenirs.pick(world.random);
         ItemStack out = new ItemStack(prize);
+        Text outText = out.toHoverableText();   // offerOrDrop 이 스택을 비우므로 미리 만들어 둔다
         stack.decrementUnlessCreative(1, sp);
         sp.getInventory().offerOrDrop(out);
 
@@ -125,9 +126,9 @@ public class CapsuleItem extends Item {
         if (jackpot) {
             sw.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, sp.getX(), sp.getEyeY(), sp.getZ(), 40, 0.5, 0.6, 0.5, 0.3);
             sw.getServer().getPlayerManager().broadcast(
-                    Text.translatable("gacha.newyearcountdown.jackpot", sp.getDisplayName(), out.toHoverableText()).formatted(Formatting.GOLD), false);
+                    Text.translatable("gacha.newyearcountdown.jackpot", sp.getDisplayName(), outText).formatted(Formatting.GOLD), false);
         }
-        sp.sendMessage(Text.translatable("gacha.newyearcountdown.got", out.toHoverableText()), true);
+        sp.sendMessage(Text.translatable("gacha.newyearcountdown.got", outText), true);
         return stack;
     }
 }
