@@ -49,12 +49,11 @@ import java.util.List;
  * - 새해 샴페인(소모): 꾹 흔들수록 세게, 쏴아아 거품이 앞으로 뿜어져(ChampagneSpray) 불을 끄고 몬스터를 밀어낸다
  * - 황금 배지(5분 쿨다운): 황금빛 축복 = 흡수 + 재생 + 저항
  * - 방패연(30초): 하늘이 열린 곳에서 연처럼 떠올라 천천히 내려온다
- * - 윷 세트(20초): 윷을 던져 도·개·걸·윷·모 에 따라 다른 버프, 윷/모면 한 번 더
  * - 덕담 카드(소모): 다른 플레이어에게 우클릭하면 둘 다 행운 + 재생, 혼자 쓰면 행운
  * 모델 쪽 상태 전환(흔들림/열림/불꽃 등)은 클라이언트 ItemAnim 이 쿨다운·사용 상태를 보고 고른다.
  */
 public class SouvenirItem extends Item {
-    public enum Kind { PLAIN, POUCH, BELL, ENVELOPE, CALENDAR, FIRECRACKER, CHAMPAGNE, BADGE, KITE, YUT, CARD }
+    public enum Kind { PLAIN, POUCH, BELL, ENVELOPE, CALENDAR, FIRECRACKER, CHAMPAGNE, BADGE, KITE, CARD }
 
     /** 폭죽 심지가 타는 시간 / 샴페인을 최대로 흔드는 시간(틱). */
     public static final int FUSE_TICKS = 24;
@@ -88,7 +87,6 @@ public class SouvenirItem extends Item {
             case CALENDAR -> 24;
             case BADGE -> 6000;
             case KITE -> 600;
-            case YUT -> 400;
             case CARD -> 24;
             case FIRECRACKER -> 40;
             default -> 20;
@@ -120,7 +118,6 @@ public class SouvenirItem extends Item {
                         case KITE -> {
                             if (!flyKite(sw, sp)) return TypedActionResult.fail(stack);
                         }
-                        case YUT -> cd = throwYut(sw, sp);
                         case CARD -> sendCardToSelf(sw, sp, stack);
                         default -> { }
                     }
@@ -200,7 +197,7 @@ public class SouvenirItem extends Item {
                         SoundCategory.PLAYERS, 0.5f, 1.2f + power * 0.8f);
             }
             if (used % 2 == 0) {
-                Vec3d top = eye.add(look.multiply(0.6)).add(0, -0.15, 0);
+                Vec3d top = user instanceof ServerPlayerEntity sp ? ChampagneSpray.mouth(sp) : eye.add(look.multiply(0.6));
                 sw.spawnParticles(ParticleTypes.BUBBLE_POP, top.x, top.y, top.z, 1 + (int) (power * 4), 0.12, 0.12, 0.12, 0.02);
                 if (power > 0.5f) {
                     sw.spawnParticles(ParticleTypes.SPLASH, top.x, top.y + 0.1, top.z, 2, 0.1, 0.1, 0.1, 0.1);
@@ -243,6 +240,8 @@ public class SouvenirItem extends Item {
 
     private static void openPouch(ServerWorld sw, ServerPlayerEntity p, ItemStack stack) {
         ItemStack loot = pouchLoot(sw.random);
+        Text lootName = loot.getName();
+        int lootCount = loot.getCount();   // offerOrDrop 이 스택을 비우므로 미리 읽어 둔다
         stack.decrementUnlessCreative(1, p);
         p.getInventory().offerOrDrop(loot);
         p.addStatusEffect(new StatusEffectInstance(StatusEffects.LUCK, 20 * 60 * 10, 0));
@@ -251,7 +250,7 @@ public class SouvenirItem extends Item {
         sw.spawnParticles(new ItemStackParticleEffect(ParticleTypes.ITEM, new ItemStack(Items.GOLD_NUGGET)),
                 p.getX(), p.getEyeY() - 0.2, p.getZ(), 12, 0.35, 0.25, 0.35, 0.12);
         sw.spawnParticles(ParticleTypes.HAPPY_VILLAGER, p.getX(), p.getEyeY(), p.getZ(), 6, 0.4, 0.3, 0.4, 0.0);
-        p.sendMessage(Text.translatable("item.newyearcountdown.lucky_pouch.opened", loot.getCount(), loot.getName()).formatted(Formatting.GOLD), true);
+        p.sendMessage(Text.translatable("item.newyearcountdown.lucky_pouch.opened", lootCount, lootName).formatted(Formatting.GOLD), true);
     }
 
     private static ItemStack pouchLoot(Random r) {
@@ -381,50 +380,6 @@ public class SouvenirItem extends Item {
         return true;
     }
 
-    /** 윷놀이. 막대 4개가 각각 평평한 면(앞)이 나올 확률 1/2: 1개 도, 2개 개, 3개 걸, 4개 윷, 0개 모. 반환: 다음 쿨다운(틱). */
-    private static int throwYut(ServerWorld sw, ServerPlayerEntity p) {
-        int flat = 0;
-        for (int i = 0; i < 4; i++) if (sw.random.nextBoolean()) flat++;
-        String key;
-        boolean again = false;
-        switch (flat) {
-            case 1 -> {
-                key = "do";
-                p.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 20 * 60, 0));
-            }
-            case 2 -> {
-                key = "gae";
-                p.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE, 20 * 90, 0));
-            }
-            case 3 -> {
-                key = "geol";
-                p.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 20 * 60, 0));
-            }
-            case 4 -> {
-                key = "yut";
-                again = true;
-                p.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 20 * 45, 1));
-                p.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 20 * 8, 1));
-            }
-            default -> {
-                key = "mo";
-                again = true;
-                p.addStatusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 20 * 90, 1));
-                p.addStatusEffect(new StatusEffectInstance(StatusEffects.LUCK, 20 * 120, 1));
-            }
-        }
-        sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.BLOCK_WOOD_HIT, SoundCategory.PLAYERS, 1.0f, 1.0f);
-        sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.BLOCK_BAMBOO_WOOD_PLACE, SoundCategory.PLAYERS, 0.9f, 1.2f);
-        sw.spawnParticles(new ItemStackParticleEffect(ParticleTypes.ITEM, new ItemStack(Items.STICK)),
-                p.getX(), p.getEyeY() - 0.3, p.getZ(), 14, 0.5, 0.3, 0.5, 0.15);
-        if (again) {
-            sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 0.7f, 1.6f);
-            sw.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, p.getX(), p.getEyeY(), p.getZ(), 14, 0.4, 0.4, 0.4, 0.2);
-        }
-        p.sendMessage(Text.translatable("item.newyearcountdown.yut_set.result." + key).formatted(again ? Formatting.GOLD : Formatting.YELLOW), true);
-        return again ? 20 : 400;
-    }
-
     /** 혼자 쓰는 덕담 카드: 행운 2분 + 약간의 경험치. 소모. */
     private static void sendCardToSelf(ServerWorld sw, ServerPlayerEntity p, ItemStack stack) {
         stack.decrementUnlessCreative(1, p);
@@ -459,7 +414,7 @@ public class SouvenirItem extends Item {
     }
 
     private void popChampagne(ServerWorld sw, ServerPlayerEntity p, float power) {
-        Vec3d mouth = p.getEyePos().add(p.getRotationVec(1.0f).multiply(0.7)).add(0, -0.2, 0);
+        Vec3d mouth = ChampagneSpray.mouth(p);
         sw.playSound(null, mouth.x, mouth.y, mouth.z, SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST, SoundCategory.PLAYERS, 1.1f, 0.7f + (1f - power) * 0.4f);
         sw.playSound(null, mouth.x, mouth.y, mouth.z, SoundEvents.BLOCK_BEEHIVE_EXIT, SoundCategory.PLAYERS, 1.0f, 1.6f);
         sw.playSound(null, mouth.x, mouth.y, mouth.z, SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 0.5f, 1.7f);

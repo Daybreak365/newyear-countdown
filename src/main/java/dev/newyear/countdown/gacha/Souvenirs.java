@@ -7,6 +7,7 @@ import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.MapColor;
+import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.block.piston.PistonBehavior;
 import net.minecraft.component.type.FoodComponent;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -72,7 +73,15 @@ public final class Souvenirs {
                     .statusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 20 * 120, 1), 1.0f)
                     .build())), 14);
     public static final Item KITE = add("kite", new SouvenirItem(new Item.Settings().maxCount(1).rarity(Rarity.UNCOMMON), SouvenirItem.Kind.KITE), 10);
-    public static final Item YUT_SET = add("yut_set", new SouvenirItem(new Item.Settings().maxCount(1), SouvenirItem.Kind.YUT), 10);
+
+    /** 윷 세트: 바닥에 까는 윷판(블록 + 블록 엔티티). */
+    public static final Block YUT_BOARD_BLOCK = Registry.register(Registries.BLOCK, id("yut_board"),
+            new YutBoardBlock(AbstractBlock.Settings.create().mapColor(MapColor.OAK_TAN).strength(0.6f)
+                    .sounds(BlockSoundGroup.WOOD).nonOpaque().pistonBehavior(PistonBehavior.DESTROY)));
+    public static final BlockEntityType<YutBoardBlockEntity> YUT_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, id("yut_board"),
+            BlockEntityType.Builder.create(YutBoardBlockEntity::new, YUT_BOARD_BLOCK).build(null));
+    public static final Item YUT_SET = add("yut_set", new YutBoardItem(YUT_BOARD_BLOCK, new Item.Settings()), 10);
+
     public static final Item GREETING_CARD = add("greeting_card", new SouvenirItem(new Item.Settings().maxCount(16), SouvenirItem.Kind.CARD), 13);
 
     private Souvenirs() {}

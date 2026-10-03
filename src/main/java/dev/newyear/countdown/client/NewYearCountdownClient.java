@@ -68,6 +68,7 @@ public class NewYearCountdownClient implements ClientModInitializer {
         BlockEntityRendererFactories.register(ModBlocks.BELL_BE, BellRenderer::new);
         BlockEntityRendererFactories.register(OmikujiBlocks.OMIKUJI_BE, OmikujiRenderer::new);
         BlockEntityRendererFactories.register(dev.newyear.countdown.gacha.GachaBlocks.GACHA_BE, GachaRenderer::new);
+        BlockEntityRendererFactories.register(dev.newyear.countdown.gacha.Souvenirs.YUT_BE, YutBoardRenderer::new);
         ItemAnim.register();   // 캡슐/기념품 모델 상태 전환 (흔들림·열림·불꽃…)
         ClientPlayNetworking.registerGlobalReceiver(OmikujiPackets.AnimS2C.ID, (payload, context) -> {
             MinecraftClient mc = context.client();

@@ -35,9 +35,19 @@ def lens(txt=None, w=28, h=34):
     # 프레임 안팎 하이라이트/그림자
     d.rounded_rectangle([1 * SS, 1 * SS, W - 2 * SS, H - 2 * SS], radius=r - SS, outline=(255, 250, 200, 255), width=SS)
     d.rounded_rectangle([t - SS // 2, t - SS // 2, W - 1 - t + SS // 2, H - 1 - t + SS // 2], radius=r - t // 2, outline=(120, 76, 8, 255), width=SS)
-    # 유리 반사 줄무늬: 불투명한 얇은 흰 선 두 줄만 (눈을 가리지 않게 가장자리 쪽)
-    d.line([(t + 1 * SS, H - t - 4 * SS), (t + 5 * SS, t + 5 * SS)], fill=(255, 255, 255, 255), width=SS)
-    d.line([(t + 3 * SS, H - t - 2 * SS), (t + 6 * SS, t + 12 * SS)], fill=(220, 240, 255, 255), width=SS)
+    # 2027 숫자: 속이 빈 두꺼운 윤곽선 글자 (눈이 글자 안/사이로 보인다)
+    if txt:
+        f = ImageFont.truetype(FONT, int(21 * SS))
+        mask_t = Image.new('L', (W, H), 0)
+        ImageDraw.Draw(mask_t).text((W / 2, H / 2 + 1 * SS), txt, font=f, fill=255, anchor='mm')
+        grow = mask_t.filter(ImageFilter.MaxFilter(int(2.2 * SS) // 2 * 2 + 1))
+        edge = Image.fromarray(np.clip(np.array(grow, dtype=int) - np.array(mask_t, dtype=int), 0, 255).astype(np.uint8), 'L')
+        grow2 = mask_t.filter(ImageFilter.MaxFilter(int(3.8 * SS) // 2 * 2 + 1))
+        shadow = Image.fromarray(np.clip(np.array(grow2, dtype=int) - np.array(grow, dtype=int), 0, 255).astype(np.uint8), 'L')
+        sh = Image.new('RGBA', (W, H), (120, 70, 4, 255)); sh.putalpha(shadow)
+        gd = gold_gradient(W, H, '#fff6b8', '#ffd23a', '#e09a10'); gd.putalpha(edge)
+        img = Image.alpha_composite(img, sh)
+        img = Image.alpha_composite(img, gd)
     out = img.resize((w, h), Image.LANCZOS)
     a = np.array(out)
     a[..., 3] = np.where(a[..., 3] > 110, 255, 0)   # 알파를 0/255 로 이진화 (컷아웃)
@@ -56,8 +66,8 @@ def star(d, cx, cy, R, fill):
 def build(path):
     sheet = Image.new('RGBA', (512, 256), (0, 0, 0, 0))
     # 앞면: 렌즈 둘 + 브리지
-    sheet.alpha_composite(lens(), (66, 79))
-    sheet.alpha_composite(lens(), (98, 79))
+    sheet.alpha_composite(lens('20'), (66, 79))
+    sheet.alpha_composite(lens('27'), (98, 79))
     d = ImageDraw.Draw(sheet)
     bridge = gold_gradient(8, 8).resize((8, 8))
     sheet.alpha_composite(bridge, (92, 90))
@@ -73,8 +83,7 @@ def build(path):
         hx = x0 + hinge_x
         d.rectangle([hx, 84, hx + 7, 101], fill=(166, 112, 10, 255))
         d.rectangle([hx + 1, 85, hx + 6, 88], fill=(255, 236, 140, 255))
-        f = ImageFont.truetype(FONT, 9)
-        d.text((x0 + 32, 92), '2027', font=f, fill=(110, 66, 6, 255), anchor='mm')
+        star(d, x0 + 30, 92, 7, (255, 244, 170, 255))
     # 뒤쪽: 얇은 스트랩 + 작은 별
     strap = gold_gradient(64, 6, '#e8c860', '#c89a20', '#7a5208')
     sheet.alpha_composite(strap, (192, 90))

@@ -31,7 +31,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public class SheepPlushBlock extends HorizontalFacingBlock {
     public static final MapCodec<SheepPlushBlock> CODEC = createCodec(SheepPlushBlock::new);
-    private static final VoxelShape SHAPE = Block.createCuboidShape(2.5, 0, 2.5, 13.5, 13, 13.5);
+    private static final VoxelShape SHAPE = Block.createCuboidShape(1.5, 0, 1.5, 14.5, 14.5, 15);
 
     public SheepPlushBlock(Settings settings) {
         super(settings);

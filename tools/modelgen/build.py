@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 ASSETS = os.path.abspath(os.path.join(HERE, '..', '..', 'src', 'main', 'resources', 'assets', 'newyearcountdown'))
 
-import m_bell, m_shrine, m_lantern, m_gacha, m_capsule, m_goods1, m_goods2, m_goods3, entity_textures, armor_texture
+import m_bell, m_shrine, m_lantern, m_gacha, m_goods1, m_goods2, m_goods3, entity_textures, armor_texture, capsule_2d, yut_board
 
 NS = 'newyearcountdown'
 MDIR = os.path.join(ASSETS, 'models', 'item')
@@ -51,19 +51,8 @@ def main():
     for mod in (m_bell, m_shrine, m_lantern, m_gacha):
         put(mod.build(), 'structures')
 
-    # ---- 캡슐: 6색 x (기본 / 좌우 흔들 / 열림)
-    caps = []
-    for i in range(6):
-        base = put(m_capsule.build(i), 'capsule')
-        put(m_capsule.build(i, True).like(base), 'capsule_open')
-        base.write_variant(ASSETS, f'capsule_c{i}_a', f'capsule_c{i}', roll=12)
-        base.write_variant(ASSETS, f'capsule_c{i}_b', f'capsule_c{i}', roll=-12)
-    cap = {'parent': f'{NS}:item/capsule_c0', 'overrides': []}
-    for code in range(24):
-        c, s = divmod(code, 4)
-        model = [f'capsule_c{c}', f'capsule_c{c}_a', f'capsule_c{c}_b', f'capsule_c{c}_open'][s]
-        cap['overrides'].append({'predicate': {f'{NS}:capsule': round(code / 24, 5)}, 'model': f'{NS}:item/{model}'})
-    dump('capsule', cap)
+    # ---- 캡슐: 바닐라 느낌 2D 픽셀아트 (6색 x 기본/좌우 흔들/열림)
+    capsule_2d.write(ASSETS)
 
     # ---- 기념품
     put(m_goods1.glasses(), 'goods')
@@ -79,7 +68,7 @@ def main():
     sheep.write_block(ASSETS, 'sheep_plush')          # 설치할 수 있는 인형 블록 모델
     add_overrides('sheep_plush', [(0.9, 'sheep_plush_squish')])
 
-    bell = put(m_goods1.mini_bell(), 'goods')
+    bell = put(m_goods3.mini_bell(), 'goods')
     bell.write_variant(ASSETS, 'mini_bell_a', 'mini_bell', roll=16)
     bell.write_variant(ASSETS, 'mini_bell_b', 'mini_bell', roll=-16)
     add_overrides('mini_bell', [(0.3, 'mini_bell_a'), (0.6, 'mini_bell_b'), (0.9, 'mini_bell_a')])
@@ -110,9 +99,8 @@ def main():
     kt = put(m_goods3.kite(), 'goods')
     put(m_goods3.kite(True).like(kt), 'goods_state')
     add_overrides('kite', [(0.9, 'kite_fly')])
-    yt = put(m_goods3.yut(), 'goods')
-    put(m_goods3.yut(True).like(yt), 'goods_state')
-    add_overrides('yut_set', [(0.9, 'yut_set_thrown')])
+    put(m_goods3.yut(), 'goods')      # 윷 세트 아이템 모델 (설치하면 윷판 블록 yut_board)
+    yut_board.write(ASSETS)
     cd = put(m_goods3.card(), 'goods')
     put(m_goods3.card(True).like(cd), 'goods_state')
     add_overrides('greeting_card', [(0.9, 'greeting_card_open')])

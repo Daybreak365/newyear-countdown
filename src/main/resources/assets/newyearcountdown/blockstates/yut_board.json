@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=south": { "model": "newyearcountdown:block/yut_board" },
+    "facing=west": { "model": "newyearcountdown:block/yut_board", "y": 90 },
+    "facing=north": { "model": "newyearcountdown:block/yut_board", "y": 180 },
+    "facing=east": { "model": "newyearcountdown:block/yut_board", "y": 270 }
+  }
+}

@@ -14,11 +14,17 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.Arm;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 
 import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,7 +37,21 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ChampagneSpray {
     private record Spray(ServerWorld world, int total, float power, int[] age) {}
 
+    /** 바닥/벽에 뿌려져 잠깐 남는 거품 자국. life 가 다하면 사라진다. */
+    private record Foam(ServerWorld world, Vec3d pos, int[] life) {}
+
     private static final Map<UUID, Spray> ACTIVE = new ConcurrentHashMap<>();
+    private static final List<Foam> FOAM = new CopyOnWriteArrayList<>();
+    private static final int MAX_FOAM = 300;
+
+    /** 병 입구 위치: 눈 앞 + 주로 쓰는 손 쪽으로 치우친 곳(들고 있는 병의 윗부분). */
+    public static Vec3d mouth(ServerPlayerEntity p) {
+        Vec3d look = p.getRotationVec(1.0f);
+        Vec3d right = look.crossProduct(new Vec3d(0, 1, 0));
+        right = right.lengthSquared() < 1e-4 ? new Vec3d(1, 0, 0) : right.normalize();
+        double side = p.getMainArm() == Arm.RIGHT ? 0.30 : -0.30;
+        return p.getEyePos().add(look.multiply(0.8)).add(right.multiply(side)).add(0, -0.16, 0);
+    }
 
     private ChampagneSpray() {}
 
@@ -47,7 +67,27 @@ public final class ChampagneSpray {
         ServerTickEvents.END_SERVER_TICK.register(ChampagneSpray::tick);
     }
 
+    private static void tickFoam() {
+        for (Foam f : FOAM) {
+            int left = --f.life()[0];
+            if (left <= 0) {
+                FOAM.remove(f);
+                continue;
+            }
+            ServerWorld sw = f.world();
+            // 시간이 지날수록 듬성듬성: 거품이 꺼지며(BUBBLE_POP) 사라진다
+            if (sw.random.nextInt(60) < left || left > 40) {
+                double jx = (sw.random.nextDouble() - 0.5) * 0.7, jz = (sw.random.nextDouble() - 0.5) * 0.7;
+                sw.spawnParticles(ParticleTypes.SPIT, f.pos().x + jx, f.pos().y + 0.04, f.pos().z + jz, 1, 0.02, 0.0, 0.02, 0.0);
+            }
+            if (left % 3 == 0) {
+                sw.spawnParticles(ParticleTypes.BUBBLE_POP, f.pos().x, f.pos().y + 0.06, f.pos().z, 1, 0.3, 0.02, 0.3, 0.0);
+            }
+        }
+    }
+
     private static void tick(MinecraftServer server) {
+        tickFoam();
         Iterator<Map.Entry<UUID, Spray>> it = ACTIVE.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UUID, Spray> e = it.next();
@@ -68,24 +108,43 @@ public final class ChampagneSpray {
         float t = age / (float) s.total();
         float strength = (1f - t * 0.55f) * (0.55f + 0.45f * s.power());   // 끝으로 갈수록 약해진다
         Vec3d look = p.getRotationVec(1.0f);
-        Vec3d mouth = p.getEyePos().add(look.multiply(0.75)).add(0, -0.25, 0);
+        Vec3d mouth = mouth(p);
 
-        // 거품 줄기: 속도가 있는 파티클(count 0 이면 오프셋이 곧 속도)을 부채꼴로 여러 줄 쏜다
-        int jets = 6 + (int) (strength * 8);
-        double speed = 0.45 + 0.55 * strength;
+        // 거품 줄기: 병 입구에서 좁게 시작해 멀어질수록 퍼진다. 속도가 제각각인 하얀 거품 알갱이(SPIT) + 안개(SNOWFLAKE) + 물방울
+        int jets = 10 + (int) (strength * 12);
         for (int i = 0; i < jets; i++) {
-            double sp = 0.10 + 0.05 * (i % 3);
-            Vec3d d = look.add((sw.random.nextDouble() - 0.5) * sp * 2, (sw.random.nextDouble() - 0.5) * sp * 2, (sw.random.nextDouble() - 0.5) * sp * 2);
-            sw.spawnParticles(ParticleTypes.CLOUD, mouth.x, mouth.y, mouth.z, 0, d.x, d.y, d.z, speed);
-            if (i % 2 == 0) {
-                sw.spawnParticles(ParticleTypes.SPLASH, mouth.x, mouth.y, mouth.z, 0, d.x, d.y + 0.03, d.z, speed * 1.1);
-            }
-            if (i % 3 == 0) {
-                sw.spawnParticles(ParticleTypes.BUBBLE_POP, mouth.x, mouth.y, mouth.z, 0, d.x, d.y, d.z, speed * 0.8);
-            }
+            double sp = 0.035 + sw.random.nextDouble() * 0.09;
+            Vec3d d = look.add((sw.random.nextDouble() - 0.5) * sp * 2, (sw.random.nextDouble() - 0.5) * sp * 2 + 0.02, (sw.random.nextDouble() - 0.5) * sp * 2);
+            double speed = (0.35 + 0.75 * strength) * (0.55 + sw.random.nextDouble() * 0.9);
+            sw.spawnParticles(ParticleTypes.SPIT, mouth.x, mouth.y, mouth.z, 0, d.x, d.y, d.z, speed);
+            if (i % 2 == 0) sw.spawnParticles(ParticleTypes.SNOWFLAKE, mouth.x, mouth.y, mouth.z, 0, d.x, d.y, d.z, speed * 0.85);
+            if (i % 4 == 0) sw.spawnParticles(ParticleTypes.SPLASH, mouth.x, mouth.y, mouth.z, 0, d.x, d.y + 0.04, d.z, speed);
+            if (i % 5 == 0) sw.spawnParticles(ParticleTypes.BUBBLE_POP, mouth.x, mouth.y, mouth.z, 0, d.x, d.y, d.z, speed * 0.7);
         }
-        if (age % 4 == 0) {
-            sw.spawnParticles(ParticleTypes.FIREWORK, mouth.x, mouth.y, mouth.z, 0, look.x, look.y, look.z, 0.25 + 0.3 * strength);
+        if (age % 3 == 0) {
+            sw.spawnParticles(ParticleTypes.CLOUD, mouth.x, mouth.y, mouth.z, 0, look.x, look.y, look.z, 0.5 + 0.4 * strength);
+        }
+        if (age < 4) {
+            sw.spawnParticles(ParticleTypes.POOF, mouth.x, mouth.y, mouth.z, 4, 0.05, 0.05, 0.05, 0.08);
+        }
+        // 닿은 곳(벽·바닥, 허공이면 떨어질 바닥)에 거품 자국을 남긴다
+        if (age % 2 == 0 && FOAM.size() < MAX_FOAM) {
+            double reachFoam = 3.0 + 4.0 * strength;
+            Vec3d end = mouth.add(look.multiply(reachFoam));
+            BlockHitResult hr = sw.raycast(new RaycastContext(mouth, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, p));
+            Vec3d spot = null;
+            if (hr.getType() == HitResult.Type.BLOCK) {
+                spot = hr.getPos().add(Vec3d.of(hr.getSide().getVector()).multiply(0.03));
+            } else {
+                BlockHitResult down = sw.raycast(new RaycastContext(end, end.add(0, -6, 0), RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, p));
+                if (down.getType() == HitResult.Type.BLOCK) spot = down.getPos().add(0, 0.03, 0);
+            }
+            if (spot != null) {
+                for (int k = 0; k < 2; k++) {
+                    Vec3d at = spot.add((sw.random.nextDouble() - 0.5) * 0.9, 0, (sw.random.nextDouble() - 0.5) * 0.9);
+                    FOAM.add(new Foam(sw, at, new int[]{50 + sw.random.nextInt(50)}));
+                }
+            }
         }
         // 쏴아아 소리
         if (age % 3 == 0) {

@@ -280,18 +280,20 @@ def art(w_u, h_u, ppu=28):
     return img, ImageDraw.Draw(img), ppu
 
 
-def ov_image(img, x0, y1, ppu, front=True, min_nz=0.2):
+def ov_image(img, x0, y1, ppu, front=True, min_nz=0.2, zmin=None):
     """img 의 좌상단이 모델 좌표 (x0, y1) (y1 = 이미지 윗변의 y)에 오도록 붙인다. 면 법선이 +z 를 향할 때만."""
     arr = np.asarray(img, dtype=np.float64) / 255.0
     H, W = arr.shape[:2]
 
     def fn(ctx, base):
-        if front and ctx.N[2] <= min_nz:
+        if zmin is None and front and ctx.N[2] <= min_nz:
             return base
         X, Y = ctx.P[..., 0], ctx.P[..., 1]
         ix = np.floor((X - x0) * ppu).astype(int)
         iy = np.floor((y1 - Y) * ppu).astype(int)
         ok = (ix >= 0) & (ix < W) & (iy >= 0) & (iy < H)
+        if zmin is not None:      # 곡면(종/머리): 면 방향 대신 위치로 앞쪽 반구에만 붙인다 (턱진 윗면에도 이어진다)
+            ok = ok & (ctx.P[..., 2] > zmin)
         ixc, iyc = np.clip(ix, 0, W - 1), np.clip(iy, 0, H - 1)
         px = arr[iyc, ixc]
         a = (px[..., 3] * ok)[..., None]

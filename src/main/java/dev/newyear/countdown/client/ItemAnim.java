@@ -85,7 +85,6 @@ public final class ItemAnim {
             case CHAMPAGNE -> using ? wiggle : (cooldown(item, entity) > 0f ? 3 : 0);  // 흔드는 중 → 쏴아아
             case BADGE -> el < 50f ? 3 : 0;                            // 반짝반짝
             case KITE -> el < 40f ? 3 : 0;                             // 하늘 높이
-            case YUT -> el < 30f ? 3 : 0;                              // 공중에서 도는 윷
             default -> 0;
         };
     }

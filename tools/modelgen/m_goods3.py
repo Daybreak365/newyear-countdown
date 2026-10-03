@@ -44,7 +44,7 @@ def sheep(squish=False):
     d.ellipse([X(7.65), Y(ey - 0.85), X(8.35), Y(ey - 1.35)], fill=rgba('#d98a8a'))
     d.arc([X(7.0), Y(ey - 1.3), X(8.0), Y(ey - 2.1)], 10, 170, fill=rgba('#6b3a30'), width=int(0.14 * ppu))
     d.arc([X(8.0), Y(ey - 1.3), X(9.0), Y(ey - 2.1)], 10, 170, fill=rgba('#6b3a30'), width=int(0.14 * ppu))
-    face = Mat(skin_c, base=b_cloth(skin_c, 0.5), shape=('sphere', hc, (1, 1, 1)), spec=0.08, bevel=0.0, noise=0.008, ambient=0.86, diffuse=0.28).overlay(ov_image(img, 4.2, 12.4, ppu))
+    face = Mat(skin_c, base=b_cloth(skin_c, 0.5), shape=('sphere', hc, (1, 1, 1)), spec=0.08, bevel=0.0, noise=0.008, ambient=0.86, diffuse=0.28).overlay(ov_image(img, 4.2, 12.4, ppu, zmin=10.3))
     B.extend(lathe(8, 10.0, sphere_layers(3.7, 0.4, hc[1], squash=0.95), lambda i, *a: face, sides=16))
     # 귀 (양옆, 분홍 안쪽)
     ear = Mat('#e9bba3', base=b_cloth('#e9bba3', 0.4), bevel=0.05, noise=0.01)
@@ -275,3 +275,109 @@ def card(opened=False):
         sparkle(B, 2.0, 15.0, 8.0, 1.0)
         sparkle(B, 14.4, 14.6, 8.0, 0.8)
     return Model('greeting_card' + ('_open' if opened else ''), B, density=8, gui=(16, -26, 0), ground_scale=0.5, kind='item')
+
+
+# ------------------------------------------------------------------ 귀여운 미니 보신각 종 (치비 종 + 얼굴 + 리본)
+def mini_bell():
+    B = []
+    prof = profile_layers([(1.4, 4.3), (2.2, 5.0), (3.6, 5.2), (5.4, 4.8), (7.0, 3.8), (8.4, 2.6), (9.4, 1.6), (10.0, 1.1)], 0.3)
+    img, d, ppu = art(8, 5.2, 44)
+    def X(x): return (x - 4.0) * ppu
+    def Y(y): return (8.6 - y) * ppu
+    for ex in (6.2, 9.8):
+        d.ellipse([X(ex - 0.7), Y(6.65), X(ex + 0.7), Y(5.05)], fill=rgba('#2a1a14'))
+        d.ellipse([X(ex - 0.4), Y(6.5), X(ex + 0.06), Y(5.9)], fill=rgba('#ffffff'))
+        d.ellipse([X(ex + 0.1), Y(5.5), X(ex + 0.4), Y(5.2)], fill=rgba('#ffffff'))
+    for bx in (4.9, 11.1):
+        d.ellipse([X(bx - 0.8), Y(5.0), X(bx + 0.8), Y(4.35)], fill=(255, 120, 140, 200))
+    d.arc([X(7.1), Y(5.2), X(8.0), Y(4.2)], 15, 165, fill=rgba('#7a3a2a'), width=int(0.16 * ppu))
+    d.arc([X(8.0), Y(5.2), X(8.9), Y(4.2)], 15, 165, fill=rgba('#7a3a2a'), width=int(0.16 * ppu))
+    d.text((X(8.0), Y(3.9)), '2027', font=font(0.62 * ppu), fill=rgba('#a8660a'), anchor='mm')
+    face = ov_image(img, 4.0, 8.6, ppu, zmin=8.2)
+
+    def mats(i, y1, y2, a):
+        ym = (y1 + y2) / 2
+        m = Mat('#f6cd55', base=b_vgrad('#ffe58a', '#f0b83a'), shape=('cylY', 8, 8), spec=0.8, shin=14, bevel=0.0, noise=0.006, ambient=0.8, diffuse=0.34)
+        if 1.5 < ym < 2.3:
+            m = Mat('#ee9aa6', base=b_vgrad('#ffc0c8', '#e07a8c'), shape=('cylY', 8, 8), spec=0.4, bevel=0.0, noise=0.006, ambient=0.8, diffuse=0.34)   # 분홍 입술띠
+        if 3.4 < ym < 8.4:
+            m = m.overlay(face)
+        return m
+    B.extend(lathe(8, 8, prof, mats, sides=16))
+    # 목에 두른 빨간 리본 + 매듭 + 금방울
+    red = Mat('#e0323a', base=b_cloth('#e0323a', 0.35), bevel=0.06, noise=0.01)
+    B.extend(prism(8, 8, 8.0, 8.7, 2.9, red.with_(shape=('cylY', 8, 8)), sides=16, top=True))
+    B.append(Box((5.9, 7.7, 10.7), (8.0, 9.2, 11.3), red, rot=('z', 22.5, (8.0, 8.4, 0))))
+    B.append(Box((8.0, 7.7, 10.7), (10.1, 9.2, 11.3), red, rot=('z', -22.5, (8.0, 8.4, 0))))
+    B.append(Box((7.3, 7.9, 10.6), (8.7, 9.0, 11.5), Mat('#bb2128', bevel=0.06, noise=0.01)))
+    # 동그란 손잡이 + 꼭대기 방울
+    wood_m = Mat('#c98a52', base=b_wood('#d99a5e', 0.82, 'v'), bevel=0.0, spec=0.3)
+    B.extend(sphere(8, 11.2, 8, 1.5, lambda i, *a: wood_m.with_(shape=('sphere', (8, 11.2, 8), (1, 1, 1))), step=0.45, sides=8))
+    B.extend(sphere(8, 0.9, 8, 1.0, lambda i, *a: Mat('#ff9fb0', shape=('sphere', (8, 0.9, 8), (1, 1, 1)), spec=0.8, bevel=0.0, noise=0.0), step=0.4, sides=8))
+    return Model('mini_bell', B, density=10, gui=(18, 28, 0), ground_scale=0.5, kind='item')
+
+
+# ------------------------------------------------------------------ 양 인형 (사진 속 봉제 인형 스타일: 회색 얼굴 + 하얀 털모자 + 폭신한 하얀 몸 + 길게 늘어진 팔다리)
+def sheep(squish=False):
+    B = []
+    dh = -0.5 if squish else 0.0
+    gray = '#8f949b'
+    fabric = lambda c=gray, shape=None, **k: Mat(c, base=b_cloth(c, 0.45), shape=shape, spec=0.08, bevel=0.05, noise=0.01, ambient=0.84, diffuse=0.3, **k)
+    wool = lambda c: Mat('#fffdf6', base=b_wool('#fffdf6', 0.86), shape=('sphere', c, (1, 1, 1)), spec=0.0, bevel=0.0, noise=0.008, ambient=0.86, diffuse=0.28)
+    sole = Mat('#c3c7cd', base=b_cloth('#c3c7cd', 0.45), bevel=0.05, noise=0.01)
+    # --- 다리: 소시지처럼 통통한 다리가 앞으로 뻗고 끝에 큰 발
+    foot = lambda c: Mat('#aeb2b9', base=b_cloth('#aeb2b9', 0.45), shape=('sphere', c, (1, 1, 1)), spec=0.05, bevel=0.0, noise=0.01, ambient=0.84, diffuse=0.3)
+    for sx in (6.1, 9.9):
+        for z in (8.2, 9.3, 10.4, 11.5):
+            B.extend(sphere(sx, 1.2, z, 1.15, lambda i, *a, _c=(sx, 1.2, z): fabric(shape=('sphere', _c, (1, 1, 1))), step=0.45, sides=8))
+        B.extend(sphere(sx, 1.5, 12.9, 1.65, lambda i, *a, _c=(sx, 1.5, 12.9): foot(_c), step=0.45, sides=8))
+    # --- 몸통 (폭신한 하얀 배)
+    bc = (8.0, 5.0, 6.4)
+    B.extend(lathe(8, 6.4, sphere_layers(4.2, 0.4, bc[1], squash=1.0), lambda i, *a: wool(bc), sides=16))
+    for (bx, by, bz, r) in ((8.0, 2.0, 8.8, 1.6), (8.0, 7.4, 3.8, 1.6), (4.6, 6.6, 4.6, 1.4), (11.4, 6.6, 4.6, 1.4)):
+        B.extend(sphere(bx, by, bz, r, lambda i, *a, _c=(bx, by, bz): wool(_c), step=0.45, sides=8))
+    # --- 팔: 어깨에서 늘어뜨린 통통한 회색 팔 + 둥근 손
+    for sx in (3.0, 13.0):
+        B.extend(lathe(sx, 6.2, [(3.9 + k * 0.6, 4.5 + k * 0.6, 1.2 - 0.04 * k) for k in range(6)], lambda i, *a, _x=sx: fabric(shape=('cylY', _x, 6.2)), sides=8))
+        B.extend(sphere(sx, 3.6, 6.2, 1.35, lambda i, *a, _c=(sx, 3.6, 6.2): fabric(shape=('sphere', _c, (1, 1, 1))), step=0.45, sides=8))
+    # --- 머리: 큰 회색 얼굴
+    hc = (8.0, 10.4 + dh, 9.0)
+    img, d, ppu = art(8.4, 8.4, 44)
+    def X(x): return (x - 3.8) * ppu
+    def Y(y): return (14.4 + dh - y) * ppu
+    ey = 11.0 + dh
+    for ex, fl in ((5.7, -1), (10.3, 1)):
+        # 커다란 흰 눈 + 위(바깥쪽)를 보는 검은 눈동자
+        d.ellipse([X(ex - 1.35), Y(ey + 1.5), X(ex + 1.35), Y(ey - 1.5)], fill=rgba('#ffffff'), outline=rgba('#6b6f78'), width=int(0.1 * ppu))
+        if squish:
+            d.arc([X(ex - 0.9), Y(ey + 0.6), X(ex + 0.9), Y(ey - 0.8)], 200, 340, fill=rgba('#1d1d22'), width=int(0.3 * ppu))
+        else:
+            px, py = ex + 0.25 * (-fl) * -1 * 0 + (-0.25 if fl < 0 else 0.25) * -1, ey + 0.35
+            d.ellipse([X(px - 0.78), Y(py + 0.8), X(px + 0.78), Y(py - 0.8)], fill=rgba('#16161a'))
+            d.ellipse([X(px - 0.5), Y(py + 0.62), X(px - 0.05), Y(py + 0.2)], fill=rgba('#ffffff'))
+    for bx in (4.55, 11.45):
+        d.rounded_rectangle([X(bx - 0.75), Y(ey - 1.7), X(bx + 0.75), Y(ey - 2.8)], radius=int(0.2 * ppu), fill=(255, 128, 150, 235))
+        for k in range(3):
+            d.line([(X(bx - 0.4 + k * 0.4), Y(ey - 1.85)), (X(bx - 0.4 + k * 0.4), Y(ey - 2.65))], fill=(255, 235, 240, 255), width=int(0.08 * ppu))
+    for nx in (7.15, 8.85):
+        d.line([(X(nx - 0.28), Y(ey - 2.1)), (X(nx + 0.28), Y(ey - 2.1))], fill=rgba('#30323a'), width=int(0.14 * ppu))
+    if squish:
+        d.arc([X(7.2), Y(ey - 2.4), X(8.8), Y(ey - 3.5)], 20, 160, fill=rgba('#30323a'), width=int(0.14 * ppu))
+    face = fabric(shape=('sphere', hc, (1, 1, 1))).overlay(ov_image(img, 3.8, 14.4 + dh, ppu, zmin=9.5))
+    B.extend(lathe(8, 9.0, sphere_layers(4.1, 0.4, hc[1], squash=0.88), lambda i, *a: face, sides=16))
+    # --- 하얀 털모자 (머리 위와 뒤)
+    for (px, py, pz, r) in ((6.2, 13.3, 8.6, 1.7), (8.0, 13.7, 8.8, 1.8), (9.8, 13.3, 8.6, 1.7), (5.2, 12.5, 7.8, 1.5), (10.8, 12.5, 7.8, 1.5), (6.8, 13.2, 7.0, 1.6), (9.2, 13.2, 7.0, 1.6), (8.0, 12.4, 6.4, 1.6)):
+        B.extend(sphere(px, py + dh, pz, r, lambda i, *a, _c=(px, py + dh, pz): wool(_c), step=0.45, sides=8))
+    # --- 처진 귀: 옆으로 납작하게 늘어진 둥근 귀
+    inner = lambda c: Mat('#b9bdc4', base=b_cloth('#b9bdc4', 0.45), shape=('sphere', c, (1, 1, 1)), spec=0.05, bevel=0.0, noise=0.01, ambient=0.84, diffuse=0.3)
+    for sx in (2.0, 14.0):
+        c = (sx, 9.5 + dh, 9.0)
+        B.extend(sphere(c[0], c[1], c[2], 2.0, lambda i, *a, _c=c: fabric(shape=('sphere', _c, (1, 1, 1))), step=0.4, sides=16, squash=0.38))
+    # --- 꼬리표(작은 흰 태그)
+    tag = Mat('#ffffff', base=b_paper('#ffffff', 0.03), bevel=0.0, noise=0.0).decal(d_text('2027', 1.4, 0.7, 0.5, rgba('#8a8e96'), anchor='mm'))
+    B.append(Box((12.1, 3.0, 8.0), (12.5, 4.5, 9.8), {'east': tag, '*': Mat('#ffffff', bevel=0.0)}))
+    if squish:
+        heart(B, 1.8, 14.2, 9.5, 2.0)
+        heart(B, 14.2, 14.6, 9.5, 1.7)
+        heart(B, 8.0, 16.0, 9.5, 1.5)
+    return Model('sheep_plush' + ('_squish' if squish else ''), B, density=6, gui=(16, 26, 0), ground_scale=0.5, kind='item')
