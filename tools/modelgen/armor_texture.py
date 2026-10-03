@@ -70,10 +70,8 @@ def build(path):
     sheet.alpha_composite(lens('27'), (98, 84))
     d = ImageDraw.Draw(sheet)
     bridge = gold_gradient(8, 8).resize((8, 8))
-    sheet.alpha_composite(bridge, (92, 91))
-    sheet.alpha_composite(bridge.resize((8, 6)), (92, 103))
+    sheet.alpha_composite(bridge.resize((8, 5)), (92, 92))
     # 코받침
-    d.ellipse([95, 108, 99, 113], fill=(240, 185, 42, 255))
     # 옆(오른쪽 x0..64, 왼쪽 x128..192): 다리(템플) + 힌지 + 별
     for (x0, hinge_x, flip) in ((0, 56, False), (128, 0, True)):
         arm = gold_gradient(64, 9)
@@ -83,12 +81,9 @@ def build(path):
         hx = x0 + hinge_x
         d.rectangle([hx, 84, hx + 7, 101], fill=(166, 112, 10, 255))
         d.rectangle([hx + 1, 85, hx + 6, 88], fill=(255, 236, 140, 255))
-        star(d, x0 + 30, 92, 7, (255, 244, 170, 255))
     # 뒤쪽: 얇은 스트랩 + 작은 별
     strap = gold_gradient(64, 6, '#e8c860', '#c89a20', '#7a5208')
     sheet.alpha_composite(strap, (192, 90))
-    for sx in (206, 224, 242):
-        star(d, sx, 93, 4, (255, 238, 150, 255))
     sheet.save(path)
 
 

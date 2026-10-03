@@ -1,6 +1,6 @@
 # 아이템 3D 모델 생성기
 
-보신각·오미쿠지·소원 연등·가챠 머신 아이템 아이콘과 캡슐/기념품 9종은 **큐보이드 3D 모델(JSON element) + 고해상도 텍스처 아틀라스**입니다.
+보신각·오미쿠지·소원 연등·가챠 머신 아이템 아이콘과 2027 안경은 **큐보이드 3D 모델(JSON element) + 고해상도 텍스처 아틀라스**입니다.
 손으로 픽셀을 찍는 대신 이 도구가 박스 목록에서 모델 JSON 과 텍스처를 함께 만듭니다.
 
 ```
@@ -15,3 +15,5 @@ python3 tools/modelgen/build.py --preview   # + /tmp/modelgen_preview/*.png 로 
 - `m_*.py` — 모델 정의. `preview.py` — 게임 없이 GUI 렌더를 확인하는 소프트웨어 렌더러
 - 상태 변형(`*_open`, `*_lit`, `*_burst`, 좌우 흔들림 `*_a/_b`)은 `build.py` 에서 만들고, 아이템 모델의 `overrides` 가
   클라이언트 predicate(`newyearcountdown:capsule`, `newyearcountdown:fx`, 코드는 `client/ItemAnim.java`)에 따라 고릅니다.
+
+- `capsule_2d.py`, `goods_2d.py`, `yut_board.py` 는 3D 가 아닌 픽셀아트 텍스처(캡슐, 굿즈, 윷판)를 만듭니다.
