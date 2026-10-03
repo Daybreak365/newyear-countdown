@@ -18,6 +18,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import net.minecraft.util.TypedActionResult;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.UseAction;
 import net.minecraft.world.World;
 import org.joml.Vector3f;
@@ -71,14 +72,34 @@ public class CapsuleItem extends Item {
     public void usageTick(World world, LivingEntity user, ItemStack stack, int remaining) {
         if (!(world instanceof ServerWorld sw)) return;
         int used = OPEN_TICKS - remaining;
-        if (used % 6 == 1) {
+        int rgb = RGB[colorIndex(stack)];
+        Vector3f col = new Vector3f((rgb >> 16 & 255) / 255f, (rgb >> 8 & 255) / 255f, (rgb & 255) / 255f);
+        float t = used / (float) OPEN_TICKS;
+        // 1단계(~0.8): 달그락 흔들림, 점점 빨라지고 음이 올라간다 / 2단계(0.8~): 금이 가며 빛이 샌다
+        if (used % 4 == 1 && t < 0.8f) {
             sw.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.ENTITY_TURTLE_EGG_CRACK,
-                    SoundCategory.PLAYERS, 0.7f, 1.2f + used * 0.02f);
+                    SoundCategory.PLAYERS, 0.6f, 1.1f + t * 0.9f);
         }
+        if (used == (int) (OPEN_TICKS * 0.8f)) {
+            sw.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.BLOCK_STONE_BUTTON_CLICK_ON,
+                    SoundCategory.PLAYERS, 0.8f, 1.6f);
+            sw.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME,
+                    SoundCategory.PLAYERS, 0.8f, 0.8f);
+        }
+        Vec3d at = user.getEyePos().add(user.getRotationVec(1.0f).multiply(0.55)).add(0, -0.3, 0);
         if (used % 3 == 0) {
-            int rgb = RGB[colorIndex(stack)];
-            Vector3f col = new Vector3f((rgb >> 16 & 255) / 255f, (rgb >> 8 & 255) / 255f, (rgb & 255) / 255f);
-            sw.spawnParticles(new DustParticleEffect(col, 0.9f), user.getX(), user.getEyeY() - 0.35, user.getZ(), 3, 0.25, 0.15, 0.25, 0.01);
+            sw.spawnParticles(new DustParticleEffect(col, 0.9f), at.x, at.y, at.z, 2 + (int) (t * 4), 0.18, 0.12, 0.18, 0.01);
+        }
+        if (t >= 0.8f && used % 2 == 0) {
+            sw.spawnParticles(ParticleTypes.END_ROD, at.x, at.y, at.z, 2, 0.12, 0.12, 0.12, 0.03);
+        }
+    }
+
+    @Override
+    public void onStoppedUsing(ItemStack stack, World world, LivingEntity user, int remainingUseTicks) {
+        if (world instanceof ServerWorld sw && OPEN_TICKS - remainingUseTicks > 2) {
+            sw.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.BLOCK_COMPARATOR_CLICK,
+                    SoundCategory.PLAYERS, 0.5f, 0.8f);
         }
     }
 
@@ -96,6 +117,11 @@ public class CapsuleItem extends Item {
         sw.playSound(null, sp.getX(), sp.getY(), sp.getZ(), jackpot ? SoundEvents.UI_TOAST_CHALLENGE_COMPLETE : SoundEvents.ENTITY_PLAYER_LEVELUP,
                 SoundCategory.PLAYERS, 0.7f, jackpot ? 1.0f : 1.4f);
         sw.spawnParticles(ParticleTypes.END_ROD, sp.getX(), sp.getEyeY() - 0.2, sp.getZ(), jackpot ? 40 : 14, 0.4, 0.4, 0.4, 0.05);
+        sw.spawnParticles(ParticleTypes.FIREWORK, sp.getX(), sp.getEyeY() - 0.1, sp.getZ(), 16, 0.35, 0.3, 0.35, 0.1);
+        for (int rgb : RGB) {
+            Vector3f c = new Vector3f((rgb >> 16 & 255) / 255f, (rgb >> 8 & 255) / 255f, (rgb & 255) / 255f);
+            sw.spawnParticles(new DustParticleEffect(c, 1.1f), sp.getX(), sp.getEyeY() - 0.1, sp.getZ(), 3, 0.4, 0.4, 0.4, 0.12);
+        }
         if (jackpot) {
             sw.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, sp.getX(), sp.getEyeY(), sp.getZ(), 40, 0.5, 0.6, 0.5, 0.3);
             sw.getServer().getPlayerManager().broadcast(

@@ -68,9 +68,7 @@ public class NewYearCountdownClient implements ClientModInitializer {
         BlockEntityRendererFactories.register(ModBlocks.BELL_BE, BellRenderer::new);
         BlockEntityRendererFactories.register(OmikujiBlocks.OMIKUJI_BE, OmikujiRenderer::new);
         BlockEntityRendererFactories.register(dev.newyear.countdown.gacha.GachaBlocks.GACHA_BE, GachaRenderer::new);
-        net.fabricmc.fabric.api.client.rendering.v1.ColorProviderRegistry.ITEM.register(
-                (stack, tint) -> tint == 0 ? 0xFF000000 | dev.newyear.countdown.gacha.CapsuleItem.RGB[dev.newyear.countdown.gacha.CapsuleItem.colorIndex(stack)] : -1,
-                dev.newyear.countdown.gacha.GachaBlocks.CAPSULE);
+        ItemAnim.register();   // 캡슐/기념품 모델 상태 전환 (흔들림·열림·불꽃…)
         ClientPlayNetworking.registerGlobalReceiver(OmikujiPackets.AnimS2C.ID, (payload, context) -> {
             MinecraftClient mc = context.client();
             if (mc.world != null && mc.world.getBlockEntity(payload.pos()) instanceof OmikujiBlockEntity be) {

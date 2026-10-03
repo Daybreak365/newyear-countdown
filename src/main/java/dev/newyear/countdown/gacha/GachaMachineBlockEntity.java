@@ -16,8 +16,12 @@ import java.util.UUID;
 
 /** 가챠 머신 블록 엔티티: 손잡이를 돌리는 동안의 연출 시간과 캡슐 지급을 맡는다. */
 public class GachaMachineBlockEntity extends net.minecraft.block.entity.BlockEntity {
-    /** 연출 총 길이(틱): 손잡이 0~18, 캡슐 낙하 20~30, 지급 36. */
-    public static final int TOTAL = 36;
+    /**
+     * 연출 총 길이(틱) = 지급 시점. 타임라인(GachaRenderer 와 동일):
+     * 0~4 투입/움찔, 4~26 손잡이 1.5바퀴 + 돔 안 캡슐 소용돌이, 26~32 배출구 덮개 열림 + 캡슐 밀려나옴,
+     * 32~38 받침대에 튕기며 안착, 38~42 반짝, 42 지급.
+     */
+    public static final int TOTAL = 42;
 
     /** 클라이언트: 연출이 시작된 월드 시간. */
     public long animStart = Long.MIN_VALUE / 2;
@@ -56,9 +60,13 @@ public class GachaMachineBlockEntity extends net.minecraft.block.entity.BlockEnt
         if (!(world instanceof ServerWorld sw) || be.user == null) return;
         long age = sw.getTime() - be.start;
 
-        if (age < 18 && age % 3 == 0) be.play(sw, SoundEvents.BLOCK_COMPARATOR_CLICK, 0.6f, 0.9f + age * 0.04f);
-        if (age == 22) be.play(sw, SoundEvents.BLOCK_STONE_BUTTON_CLICK_ON, 0.9f, 0.7f);
-        if (age == 28) be.play(sw, SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.3f);
+        if (age == 0) be.play(sw, SoundEvents.BLOCK_CHAIN_PLACE, 0.8f, 1.5f);                            // 동전 투입
+        if (age >= 4 && age < 26 && age % 3 == 1) be.play(sw, SoundEvents.BLOCK_COMPARATOR_CLICK, 0.6f, 0.8f + (age - 4) * 0.035f); // 손잡이 딸깍
+        if (age >= 6 && age < 26 && age % 5 == 0) be.play(sw, SoundEvents.ENTITY_TURTLE_EGG_CRACK, 0.35f, 1.5f); // 캡슐 달그락
+        if (age == 26) be.play(sw, SoundEvents.BLOCK_IRON_TRAPDOOR_OPEN, 0.7f, 1.5f);                    // 덮개 열림
+        if (age == 32) be.play(sw, SoundEvents.BLOCK_STONE_BUTTON_CLICK_ON, 0.9f, 0.7f);                // 툭
+        if (age == 35) be.play(sw, SoundEvents.BLOCK_STONE_BUTTON_CLICK_ON, 0.5f, 1.0f);                // 통
+        if (age == 38) be.play(sw, SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.3f);                  // 반짝
 
         if (age >= TOTAL) {
             UUID id = be.user;
