@@ -61,6 +61,7 @@ public final class OmikujiModel {
         drawShrineFrame(p);
         drawAltar(p);
         drawOffering(p);
+        drawAdminButton(p);
 
         float shake = 0f; // 뽑는 동안 0~1
         if (age >= 0 && age < OmikujiBlockEntity.SHAKE_END + 6) {
@@ -140,11 +141,15 @@ public final class OmikujiModel {
             }
         }
         p.use(T_DARK, WHITE);
-        p.box(-0.8f, 0.88f, -0.8f, 0.8f, 1.0f, 0.8f);                                   // 제단 상판
+        p.box(-0.8f, 0.88f, -0.8f, 0.8f, 0.99f, 0.8f);                                  // 제단 상판
+        // 상판 금 테두리: 가장자리만 두르고 상판보다 살짝 높게 (같은 높이의 면이 겹쳐 깜빡이지 않게)
         p.use(T_GOLD, GOLD);
-        p.box(-0.82f, 0.96f, -0.82f, 0.82f, 1.0f, 0.82f);                               // 상판 금 테두리
+        p.box(-0.82f, 0.955f, -0.82f, 0.82f, 1.0f, -0.74f);
+        p.box(-0.82f, 0.955f, 0.74f, 0.82f, 1.0f, 0.82f);
+        p.box(-0.82f, 0.955f, -0.74f, -0.74f, 1.0f, 0.74f);
+        p.box(0.74f, 0.955f, -0.74f, 0.82f, 1.0f, 0.74f);
         p.use(T_PILLAR, WHITE);
-        p.box(-0.5f, 1.0f, -0.5f, 0.5f, 1.01f, 0.5f);                                   // 붉은 방석
+        p.box(-0.5f, 0.99f, -0.5f, 0.5f, 1.003f, 0.5f);                                 // 붉은 방석
     }
 
     private static void drawBarrel(BellModel.Painter p, float age, float shake) {
@@ -217,6 +222,16 @@ public final class OmikujiModel {
         p.m.popPose();
     }
 
+    /** 뒤편 가운데의 작은 관리자 버튼 (OmikujiAdmin.BUTTON_Y/Z 와 같은 위치). */
+    private static void drawAdminButton(BellModel.Painter p) {
+        p.use(T_BLACK, WHITE);
+        p.box(-0.09f, 0.32f, -1.44f, 0.09f, 0.66f, -1.36f);                             // 받침 기둥
+        p.use(T_STONE, tint(0.85f, 0.85f, 0.88f));
+        p.box(-0.07f, 0.46f, -1.455f, 0.07f, 0.60f, -1.44f);                            // 판
+        p.use(T_PILLAR, tint(1.0f, 0.55f, 0.5f));
+        p.box(-0.035f, 0.495f, -1.47f, 0.035f, 0.565f, -1.455f);                        // 붉은 버튼
+    }
+
     // ---------------------------------------------------------------- 앞쪽 장식
 
     private static void drawOffering(BellModel.Painter p) {
@@ -226,13 +241,13 @@ public final class OmikujiModel {
         p.use(T_LOG, WHITE);
         for (int i = 0; i < 4; i++) {
             float x = -1.1f + i * 0.2f;
-            p.box(x, 0.74f, 0.9f, x + 0.12f, 0.8f, 1.28f);                              // 뚜껑 살
+            p.box(x, 0.742f, 0.9f, x + 0.12f, 0.8f, 1.28f);                              // 뚜껑 살
         }
         p.use(T_BLACK, WHITE);
         p.box(-0.97f, 0.74f, 0.94f, -0.61f, 0.745f, 1.0f);                              // 투입구
         p.use(T_GOLD, GOLD);
-        p.box(-1.14f, 0.7f, 0.86f, -0.44f, 0.74f, 1.32f);
-        p.box(-1.14f, 0.32f, 0.86f, -0.44f, 0.36f, 1.32f);
+        p.box(-1.14f, 0.7f, 0.86f, -0.44f, 0.735f, 1.32f);
+        p.box(-1.14f, 0.325f, 0.86f, -0.44f, 0.36f, 1.32f);
     }
 
     private static void drawSuzu(BellModel.Painter p, float age, float shake, float time, boolean live) {
@@ -252,7 +267,7 @@ public final class OmikujiModel {
         p.use(T_GOLD, GOLD);
         p.box(-0.17f, -1.22f, -0.17f, 0.17f, -0.9f, 0.17f);                             // 방울(스즈)
         p.use(T_BLACK, WHITE);
-        p.box(-0.17f, -1.07f, -0.175f, 0.17f, -1.04f, 0.175f);                          // 방울 홈
+        p.box(-0.175f, -1.07f, -0.175f, 0.175f, -1.04f, 0.175f);                          // 방울 홈
         p.m.popPose();
     }
 

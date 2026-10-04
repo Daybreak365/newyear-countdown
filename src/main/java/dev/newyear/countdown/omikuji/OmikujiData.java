@@ -43,6 +43,11 @@ public class OmikujiData extends SavedData {
         return server.getDataStorage().computeIfAbsent(TYPE);
     }
 
+    /** 모든 유저의 기록 (관리자 콘솔용). */
+    public Map<UUID, List<Entry>> all() {
+        return java.util.Collections.unmodifiableMap(byPlayer);
+    }
+
     public List<Entry> of(UUID id) {
         return byPlayer.getOrDefault(id, List.of());
     }

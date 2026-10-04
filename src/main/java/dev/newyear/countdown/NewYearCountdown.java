@@ -49,6 +49,7 @@ public class NewYearCountdown implements ModInitializer {
         PayloadTypeRegistry.serverboundPlay().register(AuthPayload.ID, AuthPayload.CODEC);
         BellPackets.register();
         dev.newyear.countdown.sebae.Sebae.init();
+        dev.newyear.countdown.curling.Curling.init();
 
         // 접속 시 현재 상태 동기화, 퇴장 시 인증 해제
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->

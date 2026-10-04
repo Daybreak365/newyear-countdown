@@ -33,6 +33,10 @@ public final class ModItemGroup {
                     e.accept(GachaBlocks.GACHA_ITEM);
                     for (int i = 0; i < CapsuleItem.RGB.length; i++) e.accept(CapsuleItem.of(i));
                     for (Souvenirs.Entry s : Souvenirs.ALL) e.accept(s.item());
+                    e.accept(dev.newyear.countdown.curling.Curling.HOUSE_ITEM);
+                    e.accept(dev.newyear.countdown.curling.Curling.STONE_RED);
+                    e.accept(dev.newyear.countdown.curling.Curling.STONE_YELLOW);
+                    e.accept(dev.newyear.countdown.curling.Curling.BROOM);
                 })
                 .build());
     }

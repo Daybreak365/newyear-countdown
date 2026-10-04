@@ -93,6 +93,14 @@ public class NewYearCountdownClient implements ClientModInitializer {
             OmikujiBook.replace(list);
             OmikujiHud.sync();
         });
+        // 오미쿠지 관리자 콘솔 (뽑기대 뒤편 버튼)
+        ClientPlayNetworking.registerGlobalReceiver(dev.newyear.countdown.omikuji.OmikujiAdmin.OpenS2C.ID,
+                (payload, context) -> context.client().gui.setScreen(new OmikujiAdminScreen()));
+        ClientPlayNetworking.registerGlobalReceiver(dev.newyear.countdown.omikuji.OmikujiAdmin.ListS2C.ID,
+                (payload, context) -> OmikujiAdminScreen.onList(payload));
+        // 컬링
+        EntityRendererRegistry.register(dev.newyear.countdown.curling.Curling.STONE, CurlingStoneRenderer::new);
+        BlockEntityRenderers.register(dev.newyear.countdown.curling.Curling.HOUSE_BE, CurlingHouseRenderer::new);
         // 소원 연등
         EntityRendererRegistry.register(WishEntities.LANTERN, WishLanternRenderer::new);
         ClientPlayNetworking.registerGlobalReceiver(WishPackets.OpenS2C.ID, (payload, context) -> context.client().gui.setScreen(new WishScreen()));

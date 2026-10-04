@@ -69,6 +69,10 @@ public class OmikujiPartBlock extends Block {
     protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
         if (world.isClientSide()) return InteractionResult.SUCCESS;
         BlockPos master = OmikujiLayout.masterOf(pos, state);
+        if (player instanceof ServerPlayer sp && OmikujiAdmin.isButton(master, state.getValue(FACING), hit.getLocation())) {
+            OmikujiAdmin.open(sp);   // 뒤편의 관리자 버튼
+            return InteractionResult.SUCCESS;
+        }
         if (world.getBlockEntity(master) instanceof OmikujiBlockEntity be && player instanceof ServerPlayer sp) {
             be.draw(sp);
         }

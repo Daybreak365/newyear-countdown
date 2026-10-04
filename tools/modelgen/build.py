@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 ASSETS = os.path.abspath(os.path.join(HERE, '..', '..', 'src', 'main', 'resources', 'assets', 'newyearcountdown'))
 
-import m_bell, m_shrine, m_lantern, m_gacha, m_goods1, m_goods2, m_goods3, entity_textures, armor_texture, capsule_2d, yut_board, goods_2d, glasses_item, gui_icons, item_defs
+import m_bell, m_shrine, m_lantern, m_gacha, m_goods1, m_goods2, m_goods3, entity_textures, armor_texture, capsule_2d, yut_board, goods_2d, glasses_item, gui_icons, item_defs, curling_2d
 
 NS = 'newyearcountdown'
 MDIR = os.path.join(ASSETS, 'models', 'item')
@@ -59,6 +59,7 @@ def main():
     gui_icons.write(ASSETS)
     glasses_item.write(ASSETS)        # 2027 안경: 착용 텍스처와 같은 모델 (armor_texture 이후)
     yut_board.write(ASSETS)
+    curling_2d.write(ASSETS)
     item_defs.write(ASSETS)           # items/*.json (26.x 아이템 모델 정의) + 안경 장비 정의
 
     if preview:

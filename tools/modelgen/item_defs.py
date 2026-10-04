@@ -7,7 +7,8 @@ import os
 NS = 'newyearcountdown'
 ITEMS = ['bosingak_bell', 'omikuji_box', 'gacha_machine', 'capsule', 'wish_lantern', 'party_glasses', 'lucky_pouch',
          'red_envelope', 'mini_calendar', 'firecracker_keychain', 'champagne', 'golden_badge', 'tteokguk', 'kite',
-         'yut_set', 'greeting_card']
+         'yut_set', 'greeting_card', 'curling_stone_red', 'curling_stone_yellow', 'curling_broom',
+         'curling_house']
 
 
 def _model(ref):

@@ -161,8 +161,8 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
         m.rotate(Axis.ZP.rotationDegrees(-turn * 360f));
         p.use(T_GOLD, WHITE);
         p.box(-0.11f, -0.03f, 0f, 0.11f, 0.03f, 0.04f);
-        p.box(-0.03f, -0.11f, 0f, 0.03f, 0.11f, 0.04f);
-        p.box(-0.045f, -0.045f, 0f, 0.045f, 0.045f, 0.065f);
+        p.box(-0.03f, -0.11f, 0.002f, 0.03f, 0.11f, 0.042f);
+        p.box(-0.045f, -0.045f, 0.004f, 0.045f, 0.045f, 0.065f);
         m.popPose();
 
         // 배출구와 받침
@@ -183,7 +183,7 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
         p.use(T_DARK, 0xFFDDDDDD);
         p.box(-0.105f, -0.14f, -0.012f, 0.105f, 0f, 0.012f);
         p.use(T_GOLD, WHITE);
-        p.box(-0.105f, -0.145f, -0.016f, 0.105f, -0.125f, 0.016f);
+        p.box(-0.108f, -0.145f, -0.016f, 0.108f, -0.125f, 0.016f);
         m.popPose();
 
         // 마퀴 전구: 평소엔 천천히 깜빡, 돌릴 때는 쫓아가고, 배출될 때는 한꺼번에 번쩍

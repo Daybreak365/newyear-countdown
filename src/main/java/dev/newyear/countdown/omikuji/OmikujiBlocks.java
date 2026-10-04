@@ -29,5 +29,6 @@ public final class OmikujiBlocks {
 
     public static void init() {
         OmikujiPackets.register();
+        OmikujiAdmin.register();
     }
 }

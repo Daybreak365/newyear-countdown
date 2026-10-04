@@ -10,6 +10,11 @@ public final class DebugAccess {
 
     private DebugAccess() {}
 
+    /** 잠금 해제에 쓴 비밀번호 (없으면 null). */
+    public static String password() {
+        return password;
+    }
+
     public static boolean unlocked() {
         return password != null;
     }
