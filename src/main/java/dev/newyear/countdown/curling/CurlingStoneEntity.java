@@ -35,6 +35,7 @@ public class CurlingStoneEntity extends Entity {
     private static final double CURL = 0.0008;
 
     private int sweepTicks;
+    private java.util.@org.jspecify.annotations.Nullable UUID thrower;
     private int slideSoundCooldown;
     /** 클라이언트 표시용 누적 회전 각(도). */
     public float spinAngle, prevSpinAngle;
@@ -45,6 +46,48 @@ public class CurlingStoneEntity extends Entity {
 
     public int team() { return entityData.get(TEAM); }
     public float spin() { return entityData.get(SPIN); }
+
+    public java.util.@org.jspecify.annotations.Nullable UUID thrower() { return thrower; }
+
+    public void setThrower(java.util.UUID id) { thrower = id; }
+
+    /** 블록 마찰에 따른 틱당 속도 유지율: 얼음 0.985, 파란 얼음 0.992, 보통 블록 0.7. 쓸면 조금 더 유지. */
+    public static double keep(double blockFriction, boolean swept) {
+        double k = 1.0 - (1.0 - blockFriction) * 0.75;
+        return swept ? Math.min(0.997, k + 0.004) : k;
+    }
+
+    /** 한 틱 미끄러짐: 회전 방향으로 휘고(느릴수록 많이) 느려진 수평 속도. (예상 경로 표시도 같은 식을 쓴다) */
+    public static Vec3 slide(Vec3 v, double blockFriction, float spin, boolean swept) {
+        double sp = Math.sqrt(v.x * v.x + v.z * v.z);
+        if (sp <= 0) return new Vec3(0, v.y, 0);
+        double curl = spin * CURL / (sp + 0.12) * (swept ? 0.45 : 1.0);
+        double nx = v.x / sp, nz = v.z / sp;
+        double hx = nx + (-nz) * curl, hz = nz + nx * curl;
+        double hl = Math.sqrt(hx * hx + hz * hz);
+        double nsp = Math.max(0, sp * keep(blockFriction, swept) - 0.0009);
+        if (nsp < 0.004) nsp = 0;
+        return new Vec3(hx / hl * nsp, v.y, hz / hl * nsp);
+    }
+
+    /** 다른 것에 부딪히지 않는다고 칠 때의 미끄러지는 경로 (2틱마다 한 점). */
+    public static java.util.List<Vec3> predict(Level level, Vec3 start, Vec3 vel, float spin) {
+        java.util.List<Vec3> out = new java.util.ArrayList<>();
+        Vec3 pos = start, v = vel;
+        for (int t = 0; t < 900; t++) {
+            BlockPos below = BlockPos.containing(pos.x, pos.y - 0.3, pos.z);
+            if (level.getBlockState(below).getCollisionShape(level, below).isEmpty()) break;     // 떨어짐
+            v = slide(v, level.getBlockState(below).getBlock().getFriction(), spin, false);
+            Vec3 next = pos.add(v.x, 0, v.z);
+            BlockPos at = BlockPos.containing(next.x, next.y + 0.1, next.z);
+            if (!level.getBlockState(at).getCollisionShape(level, at).isEmpty()) break;          // 벽
+            pos = next;
+            if (t % 2 == 0) out.add(pos);
+            if (v.x == 0 && v.z == 0) break;
+        }
+        out.add(pos);
+        return out;
+    }
 
     public void setup(int team, float spin) {
         entityData.set(TEAM, team);
@@ -84,17 +127,10 @@ public class CurlingStoneEntity extends Entity {
         if (onGround() && sp > 0) {
             boolean swept = sweepTicks > 0;
             BlockPos below = getBlockPosBelowThatAffectsMyMovement();
-            double friction = w.getBlockState(below).getBlock().getFriction();
-            double keep = 1.0 - (1.0 - friction) * 0.75;      // 얼음 0.985, 파란 얼음 0.992, 보통 블록 0.7
-            if (swept) keep = Math.min(0.997, keep + 0.004);
-            // 회전 방향 쪽으로 휜다: 느릴수록 많이
-            double curl = spin() * CURL / (sp + 0.12) * (swept ? 0.45 : 1.0);
+            Vec3 nv = slide(v, w.getBlockState(below).getBlock().getFriction(), spin(), swept);
+            double nsp = Math.sqrt(nv.x * nv.x + nv.z * nv.z);
             double nx = v.x / sp, nz = v.z / sp;
-            double hx = nx + (-nz) * curl, hz = nz + nx * curl;
-            double hl = Math.sqrt(hx * hx + hz * hz);
-            double nsp = Math.max(0, sp * keep - 0.0009);
-            if (nsp < 0.004) nsp = 0;
-            v = new Vec3(hx / hl * nsp, v.y, hz / hl * nsp);
+            v = nv;
             if (swept && w instanceof ServerLevel sw && tickCount % 2 == 0) {
                 sw.sendParticles(ParticleTypes.SNOWFLAKE, getX() + nx * 0.6, getY() + 0.05, getZ() + nz * 0.6, 2, 0.2, 0.02, 0.2, 0.01);
             }
@@ -178,12 +214,14 @@ public class CurlingStoneEntity extends Entity {
 
     @Override
     protected void readAdditionalSaveData(ValueInput in) {
+        thrower = in.read("Thrower", net.minecraft.core.UUIDUtil.CODEC).orElse(null);
         entityData.set(TEAM, in.getIntOr("Team", 0));
         entityData.set(SPIN, in.getFloatOr("Spin", 1f));
     }
 
     @Override
     protected void addAdditionalSaveData(ValueOutput out) {
+        out.storeNullable("Thrower", net.minecraft.core.UUIDUtil.CODEC, thrower);
         out.putInt("Team", team());
         out.putFloat("Spin", spin());
     }

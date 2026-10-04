@@ -72,15 +72,33 @@ public class CurlingStoneItem extends Item {
         Vec3 dir = new Vec3(look.x, 0, look.z);
         if (dir.lengthSqr() < 1.0e-4) return false;
         dir = dir.normalize();
+        CurlingHouseBlockEntity house = CurlingHouseBlockEntity.find(sw, sp.position(), dir);
+        if (house != null && !house.tryThrow(sp, team)) return false;     // 차례가 아니면 던지지 않는다
         CurlingStoneEntity stone = Curling.STONE.create(sw, EntitySpawnReason.TRIGGERED);
         if (stone == null) return false;
         stone.setup(team, sp.isShiftKeyDown() ? -1f : 1f);
-        stone.snapTo(sp.getX() + dir.x * 0.9, sp.getY(), sp.getZ() + dir.z * 0.9, sp.getYRot(), 0f);
-        stone.setDeltaMovement(dir.scale(0.1 + 0.6 * power));
+        stone.setThrower(sp.getUUID());
+        Vec3 start = startPos(sp, dir);
+        stone.snapTo(start.x, start.y, start.z, sp.getYRot(), 0f);
+        stone.setDeltaMovement(velocity(dir, power));
         sw.addFreshEntity(stone);
+        if (house != null) house.onThrown(stone, team);
         sw.playSound(null, sp.getX(), sp.getY(), sp.getZ(), SoundEvents.STONE_BREAK, SoundSource.PLAYERS, 0.6f, 1.4f);
         stack.consume(1, sp);
         return true;
+    }
+
+    /** 던질 때 스톤이 놓이는 곳과 처음 속도 (예상 경로 표시와 같은 값). */
+    public static Vec3 startPos(LivingEntity user, Vec3 dir) {
+        return new Vec3(user.getX() + dir.x * 0.9, user.getY(), user.getZ() + dir.z * 0.9);
+    }
+
+    public static Vec3 velocity(Vec3 dir, float power) {
+        return dir.scale(0.1 + 0.6 * power);
+    }
+
+    public int team() {
+        return team;
     }
 
     @Override

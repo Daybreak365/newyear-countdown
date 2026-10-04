@@ -46,8 +46,9 @@ public final class OmikujiAdmin {
     }
 
     /** 한 유저의 기록. 0번이 첫 뽑기. */
-    public record UserRecord(String name, List<Integer> results, List<Integer> numbers, List<Long> times) {
+    public record UserRecord(UUID id, String name, List<Integer> results, List<Integer> numbers, List<Long> times) {
         public static final StreamCodec<RegistryFriendlyByteBuf, UserRecord> CODEC = StreamCodec.composite(
+                net.minecraft.core.UUIDUtil.STREAM_CODEC, UserRecord::id,
                 ByteBufCodecs.STRING_UTF8, UserRecord::name,
                 ByteBufCodecs.INT.apply(ByteBufCodecs.list()), UserRecord::results,
                 ByteBufCodecs.INT.apply(ByteBufCodecs.list()), UserRecord::numbers,
@@ -100,7 +101,7 @@ public final class OmikujiAdmin {
                 numbers.add(en.number);
                 times.add(en.time);
             }
-            if (!results.isEmpty()) users.add(new UserRecord(nameOf(server, e.getKey()), results, numbers, times));
+            if (!results.isEmpty()) users.add(new UserRecord(e.getKey(), nameOf(server, e.getKey()), results, numbers, times));
         }
         users.sort((a, b) -> a.name().compareToIgnoreCase(b.name()));
         ServerPlayNetworking.send(player, new ListS2C(true, users));

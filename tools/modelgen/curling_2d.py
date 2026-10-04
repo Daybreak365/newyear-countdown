@@ -45,6 +45,7 @@ def write(assets):
         img.save(os.path.join(tdir, name + '.png'))
         with open(os.path.join(mdir, name + '.json'), 'w') as fh:
             json.dump({'parent': 'minecraft:item/generated', 'textures': {'layer0': f'newyearcountdown:item/{name}'}}, fh, indent=1)
+    write_house_texture(assets)
     # 하우스 블록: 바닥 무늬는 블록 엔티티 렌더러가 그린다 (블록 모델은 부서질 때 파티클용)
     bdir = os.path.join(assets, 'models', 'block')
     os.makedirs(bdir, exist_ok=True)
@@ -62,3 +63,48 @@ if __name__ == '__main__':
     for i, im in enumerate(imgs):
         sheet.paste(im.resize((128, 128), Image.NEAREST), (i * 128, 0), im.resize((128, 128), Image.NEAREST))
     sheet.save('/tmp/claude-0/s/curling_items.png')
+
+
+def house_texture():
+    """컬링 하우스 바닥 무늬 (5x5 블록 = 80x80, 블록당 16px). 계단처럼 각진 동심원 + 양털 결 + 눈 테두리."""
+    import numpy as np
+    from PIL import Image
+    N = 80
+    rng = np.random.default_rng(2027)
+    img = np.zeros((N, N, 4), dtype=np.uint8)
+    cols = {
+        'blue': np.array([47, 98, 200]), 'white': np.array([236, 238, 242]), 'red': np.array([200, 32, 31]),
+        'line': np.array([30, 30, 34]),
+    }
+    c = (N - 1) / 2.0
+    for y in range(N):
+        for x in range(N):
+            # 2px 단위로 계단지게 (블록 느낌)
+            gx, gy = (x // 2) * 2 + 1 - c, (y // 2) * 2 + 1 - c
+            r = (gx * gx + gy * gy) ** 0.5 / c        # 0 = 가운데, 1 = 가장자리
+            if r > 1.0:
+                continue
+            if r > 0.96:
+                base = cols['white'] * 0.82            # 바깥 눈 테두리
+            elif r > 0.64:
+                base = cols['blue']
+            elif r > 0.34:
+                base = cols['white']
+            elif r > 0.10:
+                base = cols['red']
+            else:
+                base = cols['white']
+            if abs(x - c) < 0.6 or abs(y - c) < 0.6:  # 티 라인 / 센터 라인
+                base = cols['line']
+            k = 0.9 + 0.12 * rng.random()              # 양털 결
+            if (x + y * 3) % 7 == 0:
+                k -= 0.06
+            img[y, x, :3] = np.clip(base * k, 0, 255)
+            img[y, x, 3] = 255
+    return Image.fromarray(img, 'RGBA')
+
+
+def write_house_texture(assets):
+    d = os.path.join(assets, 'textures', 'block')
+    os.makedirs(d, exist_ok=True)
+    house_texture().save(os.path.join(d, 'curling_house.png'))

@@ -10,6 +10,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
+import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
@@ -117,7 +119,7 @@ public class OmikujiAdminScreen extends Screen {
         for (int i = 0; i < u.results().size(); i++) {
             entries.add(new OmikujiBook.Entry(u.results().get(i), u.numbers().get(i), u.times().get(i)));
         }
-        Minecraft.getInstance().gui.setScreen(new OmikujiExportScreen(this, u.name(), entries));
+        Minecraft.getInstance().gui.setScreen(new OmikujiExportScreen(this, u.id(), u.name(), entries));
     }
 
     @Override
@@ -161,7 +163,8 @@ public class OmikujiAdminScreen extends Screen {
             int maxW = PANEL_W - 110 - 92;
             FormattedCharSequence line = font.split(info, maxW).isEmpty() ? FormattedCharSequence.EMPTY : font.split(info, maxW).get(0);
             ctx.text(font, line, x0 + 104, y + 6, OmikujiPaper.fortuneColor(u.results().get(0)));
-            ctx.text(font, font.plainSubstrByWidth(u.name(), 94), x0 + 6, y + 6, 0xFFFFFFFF);
+            PlayerFaceExtractor.extractRenderState(ctx, ResolvableProfile.createUnresolved(u.id()), x0 + 4, y + 2, 16);
+            ctx.text(font, font.plainSubstrByWidth(u.name(), 76), x0 + 24, y + 6, 0xFFFFFFFF);
         }
         int pages = Math.max(1, (users.size() + rows() - 1) / rows());
         ctx.text(font, (page + 1) + " / " + pages, x0 + 56, height - 20, 0xFFAAAAAA);

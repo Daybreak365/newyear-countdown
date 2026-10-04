@@ -52,6 +52,9 @@ public class CurlingBroomItem extends Item {
             s.sweep();
             any = true;
         }
+        if (any && level.getGameTime() % 10 == 0 && user instanceof net.minecraft.server.level.ServerPlayer sp) {
+            sp.sendOverlayMessage(Component.translatable("curling.newyearcountdown.sweep").withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
+        }
         if (level.getGameTime() % 4 == 0) {
             sw.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.BRUSH_GENERIC, SoundSource.PLAYERS, any ? 0.8f : 0.4f, any ? 1.3f : 1.0f);
         }

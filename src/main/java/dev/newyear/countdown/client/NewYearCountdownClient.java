@@ -123,6 +123,7 @@ public class NewYearCountdownClient implements ClientModInitializer {
             if (bell != null) bell.onRingClient(payload.strength());
         });
         LevelRenderEvents.COLLECT_SUBMITS.register(BellPreview::render);
+        LevelRenderEvents.COLLECT_SUBMITS.register(CurlingPreview::render);
         ClientTickEvents.START_CLIENT_TICK.register(BellSession::tick);
         ClientTickEvents.END_CLIENT_TICK.register(BellSession::follow);
 
