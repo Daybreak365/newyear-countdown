@@ -1,78 +1,80 @@
 package dev.newyear.countdown.gacha;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.ShapeContext;
-import net.minecraft.block.enums.DoubleBlockHalf;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.tooltip.TooltipType;
-import net.minecraft.sound.BlockSoundGroup;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
-
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.component.TooltipDisplay;
+import java.util.function.Consumer;
 import java.util.List;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.shapes.CollisionContext;
 
 /**
  * 가챠 머신 설치 아이템. 2칸 높이 블록이라 두 칸을 직접 확인하고 한꺼번에 놓는다.
  * 놓을 수 없으면 이유를 액션바로 알려 주고, 들고 있는 동안 설치될 모습이 홀로그램으로 보인다(BellPreview).
  */
 public class GachaMachineItem extends BlockItem {
-    public GachaMachineItem(Block block, Settings settings) {
+    public GachaMachineItem(Block block, Properties settings) {
         super(block, settings);
     }
 
     /** 아래 칸과 위 칸이 비어 있고(교체 가능), 아래에 단단한 블록이 있는지. 엔티티 충돌은 보지 않는다(미리보기용). */
-    public static boolean canPlace(World world, BlockPos pos) {
-        if (pos.getY() < world.getBottomY() || pos.getY() >= world.getTopY() - 1) return false;
-        if (!world.getBlockState(pos).isReplaceable() || !world.getBlockState(pos.up()).isReplaceable()) return false;
-        BlockPos below = pos.down();
-        return world.getBlockState(below).isSideSolidFullSquare(world, below, Direction.UP);
+    public static boolean canPlace(Level world, BlockPos pos) {
+        if (pos.getY() < world.getMinY() || pos.getY() >= world.getMaxY()) return false;
+        if (!world.getBlockState(pos).canBeReplaced() || !world.getBlockState(pos.above()).canBeReplaced()) return false;
+        BlockPos below = pos.below();
+        return world.getBlockState(below).isFaceSturdy(world, below, Direction.UP);
     }
 
     @Override
-    public ActionResult place(ItemPlacementContext context) {
-        World world = context.getWorld();
-        BlockPos pos = context.getBlockPos();
-        PlayerEntity player = context.getPlayer();
+    public InteractionResult place(BlockPlaceContext context) {
+        Level world = context.getLevel();
+        BlockPos pos = context.getClickedPos();
+        Player player = context.getPlayer();
 
         if (!canPlace(world, pos)) {
-            if (!world.isClient && player != null) {
-                player.sendMessage(Text.translatable("gacha.newyearcountdown.no_space"), true);
+            if (!world.isClientSide() && player != null) {
+                player.sendOverlayMessage(Component.translatable("gacha.newyearcountdown.no_space"));
             }
-            return ActionResult.FAIL;
+            return InteractionResult.FAIL;
         }
-        BlockState lower = GachaBlocks.GACHA_MACHINE.getDefaultState()
-                .with(GachaMachineBlock.FACING, context.getHorizontalPlayerFacing().getOpposite())
-                .with(GachaMachineBlock.HALF, DoubleBlockHalf.LOWER);
-        BlockState upper = lower.with(GachaMachineBlock.HALF, DoubleBlockHalf.UPPER);
-        ShapeContext shape = player != null ? ShapeContext.of(player) : ShapeContext.absent();
-        if (!world.canPlace(lower, pos, shape)) {   // 서 있는 사람/동물이 겹치면 안 됨
-            if (!world.isClient && player != null) {
-                player.sendMessage(Text.translatable("gacha.newyearcountdown.blocked"), true);
+        BlockState lower = GachaBlocks.GACHA_MACHINE.defaultBlockState()
+                .setValue(GachaMachineBlock.FACING, context.getHorizontalDirection().getOpposite())
+                .setValue(GachaMachineBlock.HALF, DoubleBlockHalf.LOWER);
+        BlockState upper = lower.setValue(GachaMachineBlock.HALF, DoubleBlockHalf.UPPER);
+        CollisionContext shape = player != null ? CollisionContext.of(player) : CollisionContext.empty();
+        if (!world.isUnobstructed(lower, pos, shape)) {   // 서 있는 사람/동물이 겹치면 안 됨
+            if (!world.isClientSide() && player != null) {
+                player.sendOverlayMessage(Component.translatable("gacha.newyearcountdown.blocked"));
             }
-            return ActionResult.FAIL;
+            return InteractionResult.FAIL;
         }
-        if (world.isClient) return ActionResult.SUCCESS;   // 실제 설치는 서버가 하고 클라이언트엔 블록 변경으로 전달된다
+        if (world.isClientSide()) return InteractionResult.SUCCESS;   // 실제 설치는 서버가 하고 클라이언트엔 블록 변경으로 전달된다
 
-        world.setBlockState(pos, lower, Block.NOTIFY_ALL);
-        world.setBlockState(pos.up(), upper, Block.NOTIFY_ALL);
-        BlockSoundGroup sounds = lower.getSoundGroup();
-        world.playSound(null, pos, sounds.getPlaceSound(), SoundCategory.BLOCKS, (sounds.getVolume() + 1.0f) / 2.0f, sounds.getPitch() * 0.8f);
-        context.getStack().decrementUnlessCreative(1, player);
-        return ActionResult.SUCCESS;
+        world.setBlock(pos, lower, Block.UPDATE_ALL);
+        world.setBlock(pos.above(), upper, Block.UPDATE_ALL);
+        SoundType sounds = lower.getSoundType();
+        world.playSound(null, pos, sounds.getPlaceSound(), SoundSource.BLOCKS, (sounds.getVolume() + 1.0f) / 2.0f, sounds.getPitch() * 0.8f);
+        context.getItemInHand().consume(1, player);
+        return InteractionResult.SUCCESS;
     }
 
     @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        tooltip.add(Text.translatable("block.newyearcountdown.gacha_machine.desc").formatted(Formatting.GRAY));
-        super.appendTooltip(stack, context, tooltip, type);
+    public void appendHoverText(ItemStack stack, Item.TooltipContext context, TooltipDisplay display, Consumer<Component> tooltip, TooltipFlag type) {
+        tooltip.accept(Component.translatable("block.newyearcountdown.gacha_machine.desc").withStyle(ChatFormatting.GRAY));
+        super.appendHoverText(stack, context, display, tooltip, type);
     }
 }

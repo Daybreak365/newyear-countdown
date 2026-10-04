@@ -10,7 +10,7 @@ def uv(x0, y0, x1, y1):
 
 
 def write(assets):
-    src = os.path.join(assets, 'textures', 'models', 'armor', 'party_glasses_layer_1.png')
+    src = os.path.join(assets, 'textures', 'entity', 'equipment', 'humanoid', 'party_glasses.png')
     dst = os.path.join(assets, 'textures', 'item', 'party_glasses_worn.png')
     shutil.copyfile(src, dst)
     tex = 'newyearcountdown:item/party_glasses_worn'

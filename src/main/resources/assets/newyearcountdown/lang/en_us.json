@@ -1,6 +1,6 @@
 {
   "key.newyearcountdown.settings": "Open Countdown Settings",
-  "key.categories.newyearcountdown": "New Year Countdown",
+  "key.category.newyearcountdown.main": "New Year Countdown",
   "hud.newyearcountdown.title": "Until New Year",
   "hud.newyearcountdown.days": "d",
   "hud.newyearcountdown.hours": "h",

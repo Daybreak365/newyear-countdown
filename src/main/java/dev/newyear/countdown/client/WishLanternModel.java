@@ -1,12 +1,11 @@
 package dev.newyear.countdown.client;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import dev.newyear.countdown.NewYearCountdown;
-import net.minecraft.client.render.OverlayTexture;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.Mth;
 
 /**
  * 소원 연등(풍등) 3D 모델. 로컬 좌표: 원점은 아래 테두리 중심, +Y 위쪽, 높이 약 1.45.
@@ -14,14 +13,14 @@ import net.minecraft.util.math.RotationAxis;
  * 연료 심지 위의 일렁이는 불꽃. 모두 스스로 빛난다.
  */
 public final class WishLanternModel {
-    public static final Identifier PAPER = Identifier.of(NewYearCountdown.MOD_ID, "textures/entity/lantern_paper.png");
-    public static final Identifier GLOW = Identifier.of(NewYearCountdown.MOD_ID, "textures/entity/lantern_glow.png");
-    private static final Identifier T_BAMBOO = Identifier.ofVanilla("textures/block/bamboo_planks.png");
-    private static final Identifier T_DARK = Identifier.ofVanilla("textures/block/dark_oak_planks.png");
-    private static final Identifier T_GOLD = Identifier.ofVanilla("textures/block/gold_block.png");
-    private static final Identifier T_ORANGE = Identifier.ofVanilla("textures/block/orange_concrete.png");
-    private static final Identifier T_YELLOW = Identifier.ofVanilla("textures/block/yellow_concrete.png");
-    private static final Identifier T_WHITE = Identifier.ofVanilla("textures/block/white_concrete.png");
+    public static final Identifier PAPER = Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "textures/entity/lantern_paper.png");
+    public static final Identifier GLOW = Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "textures/entity/lantern_glow.png");
+    private static final Identifier T_BAMBOO = Identifier.withDefaultNamespace("textures/block/bamboo_planks.png");
+    private static final Identifier T_DARK = Identifier.withDefaultNamespace("textures/block/dark_oak_planks.png");
+    private static final Identifier T_GOLD = Identifier.withDefaultNamespace("textures/block/gold_block.png");
+    private static final Identifier T_ORANGE = Identifier.withDefaultNamespace("textures/block/orange_concrete.png");
+    private static final Identifier T_YELLOW = Identifier.withDefaultNamespace("textures/block/yellow_concrete.png");
+    private static final Identifier T_WHITE = Identifier.withDefaultNamespace("textures/block/white_concrete.png");
 
     public static final float BODY_BOTTOM_Y = 0.15f, BODY_TOP_Y = 1.20f, SHOULDER_TOP_Y = 1.30f;
     public static final float R_BOTTOM = 0.46f, R_TOP = 0.44f, R_CAP = 0.30f; // 사진 속 풍등처럼 거의 곧은 통
@@ -34,8 +33,8 @@ public final class WishLanternModel {
     /** 면(패널) 중앙의 반지름(= 중심에서 면까지 거리, apothem) y 높이에서. */
     public static float apothemAt(float y) {
         float r = y <= BODY_TOP_Y
-                ? MathHelper.lerp((y - BODY_BOTTOM_Y) / (BODY_TOP_Y - BODY_BOTTOM_Y), R_BOTTOM, R_TOP)
-                : MathHelper.lerp((y - BODY_TOP_Y) / (SHOULDER_TOP_Y - BODY_TOP_Y), R_TOP, R_CAP);
+                ? Mth.lerp((y - BODY_BOTTOM_Y) / (BODY_TOP_Y - BODY_BOTTOM_Y), R_BOTTOM, R_TOP)
+                : Mth.lerp((y - BODY_TOP_Y) / (SHOULDER_TOP_Y - BODY_TOP_Y), R_TOP, R_CAP);
         return r * (float) Math.cos(Math.PI / SIDES);
     }
 
@@ -44,9 +43,9 @@ public final class WishLanternModel {
      * @param time     틱(소수 포함): 불꽃 일렁임용
      * @param seed     연등마다 다른 값(0~1)
      */
-    public static void draw(VertexConsumerProvider providers, MatrixStack m, int rgb, float time, float seed) {
+    public static void draw(GeoBuffers providers, PoseStack m, int rgb, float time, float seed) {
         BellModel.Painter p = new BellModel.Painter(providers, m, FULL, 0);
-        float flick = 0.88f + 0.12f * MathHelper.sin(time * 1.9f + seed * 9f) + 0.06f * MathHelper.sin(time * 3.7f + seed * 3f);
+        float flick = 0.88f + 0.12f * Mth.sin(time * 1.9f + seed * 9f) + 0.06f * Mth.sin(time * 3.7f + seed * 3f);
 
         drawFrame(p);
         drawFlame(p, flick, time, seed);
@@ -84,10 +83,10 @@ public final class WishLanternModel {
         float ap = R_BOTTOM * (float) Math.cos(Math.PI / SIDES);
         p.use(T_BAMBOO, 0xFFFFFFFF);
         for (int i = 0; i < SIDES; i++) {
-            p.m.push();
-            p.m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(i * 360f / SIDES));
+            p.m.pushPose();
+            p.m.rotate(Axis.YP.rotationDegrees(i * 360f / SIDES));
             p.box(-side / 2f - 0.01f, 0.10f, ap - 0.02f, side / 2f + 0.01f, 0.17f, ap + 0.02f);
-            p.m.pop();
+            p.m.popPose();
         }
         // 십자 살 + 연료 받침
         p.box(-ap, 0.11f, -0.012f, ap, 0.14f, 0.012f);
@@ -99,19 +98,19 @@ public final class WishLanternModel {
         float ap2 = R_TOP * (float) Math.cos(Math.PI / SIDES);
         float side2 = (float) (2 * R_TOP * Math.sin(Math.PI / SIDES));
         for (int i = 0; i < SIDES; i++) {
-            p.m.push();
-            p.m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(i * 360f / SIDES));
+            p.m.pushPose();
+            p.m.rotate(Axis.YP.rotationDegrees(i * 360f / SIDES));
             p.box(-side2 / 2f, BODY_TOP_Y - 0.015f, ap2 - 0.012f, side2 / 2f, BODY_TOP_Y + 0.015f, ap2 + 0.012f);
-            p.m.pop();
+            p.m.popPose();
         }
     }
 
     private static void drawFlame(BellModel.Painter p, float f, float time, float seed) {
-        p.m.push();
+        p.m.pushPose();
         p.m.translate(0, 0.185f, 0);
         // 일렁임: 위로 갈수록 살짝 흔들리고 키가 변한다
-        float sway = 0.015f * MathHelper.sin(time * 2.3f + seed * 6f);
-        p.m.multiply(RotationAxis.POSITIVE_Z.rotation(sway));
+        float sway = 0.015f * Mth.sin(time * 2.3f + seed * 6f);
+        p.m.rotate(Axis.ZP.rotation(sway));
         p.m.scale(1f, f, 1f);
         p.use(T_ORANGE, 0xFFFFFFFF);
         p.lightOverride = FULL;
@@ -123,7 +122,7 @@ public final class WishLanternModel {
         p.use(T_YELLOW, 0xFFFFFFFF);
         p.box(-0.012f, 0.24f, -0.012f, 0.012f, 0.32f, 0.012f);
         p.lightOverride = -1;
-        p.m.pop();
+        p.m.popPose();
     }
 
     // ---------------------------------------------------------------- 기하 도우미
@@ -151,7 +150,7 @@ public final class WishLanternModel {
     /** 팔각 뿔대의 옆면. (bottom → top 으로 색이 변한다; vTile 은 세로 텍스처 반복 비율) */
     private static void ring(BellModel.Painter p, float rBottom, float yBottom, float rTop, float yTop,
                              int colorBottom, int colorTop, float vTile) {
-        MatrixStack.Entry e = p.m.peek();
+        PoseStack.Pose e = p.m.last();
         for (int i = 0; i < SIDES; i++) {
             int j = i + 1;
             float mid = (i + 0.5f) * (float) (2 * Math.PI / SIDES) - OFFSET;
@@ -165,7 +164,7 @@ public final class WishLanternModel {
 
     /** 꼭대기 덮개(팔각 부채꼴). */
     private static void cap(BellModel.Painter p, float r, float y, int color) {
-        MatrixStack.Entry e = p.m.peek();
+        PoseStack.Pose e = p.m.last();
         for (int i = 0; i < SIDES; i++) {
             int j = i + 1;
             vert(p, e, 0f, y + 0.01f, 0f, 0.5f, 0.5f, color, 0f, 0f);
@@ -175,9 +174,9 @@ public final class WishLanternModel {
         }
     }
 
-    private static void vert(BellModel.Painter p, MatrixStack.Entry e, float x, float y, float z, float u, float v,
+    private static void vert(BellModel.Painter p, PoseStack.Pose e, float x, float y, float z, float u, float v,
                              int color, float nx, float nz) {
-        p.vc.vertex(e, x, y, z).color(color).texture(u, v).overlay(OverlayTexture.DEFAULT_UV)
-                .light(FULL).normal(e, nx, nz == 0 && nx == 0 ? 1f : 0f, nz);
+        p.vc.addVertex(e, x, y, z).setColor(color).setUv(u, v).setOverlay(OverlayTexture.NO_OVERLAY)
+                .setLight(FULL).setNormal(e, nx, nz == 0 && nx == 0 ? 1f : 0f, nz);
     }
 }

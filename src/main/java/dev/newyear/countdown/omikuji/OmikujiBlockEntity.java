@@ -3,18 +3,17 @@ package dev.newyear.countdown.omikuji;
 import dev.newyear.countdown.ModSounds;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import java.util.UUID;
 
 /** 오미쿠지 뽑기대. 서버가 결과를 정하고, 연출은 모든 근처 클라이언트가 같은 시간표로 재생한다. */
@@ -40,13 +39,13 @@ public class OmikujiBlockEntity extends BlockEntity {
         super(OmikujiBlocks.OMIKUJI_BE, pos, state);
     }
 
-    public static void tick(World world, BlockPos pos, BlockState state, OmikujiBlockEntity be) {
-        if (world instanceof ServerWorld sw) be.serverTick(sw);
+    public static void tick(Level world, BlockPos pos, BlockState state, OmikujiBlockEntity be) {
+        if (world instanceof ServerLevel sw) be.serverTick(sw);
     }
 
-    private void serverTick(ServerWorld world) {
+    private void serverTick(ServerLevel world) {
         if (startTick < 0) return;
-        long dt = world.getTime() - startTick;
+        long dt = world.getGameTime() - startTick;
         if (!revealed && dt >= REVEAL_AT) {
             revealed = true;
             reveal(world);
@@ -55,64 +54,64 @@ public class OmikujiBlockEntity extends BlockEntity {
     }
 
     /** 우클릭: 뽑기 시작 (서버). */
-    public void draw(ServerPlayerEntity sp) {
-        if (!(world instanceof ServerWorld sw)) return;
+    public void draw(ServerPlayer sp) {
+        if (!(level instanceof ServerLevel sw)) return;
         if (startTick >= 0) {
-            sp.sendMessage(Text.translatable("omikuji.newyearcountdown.busy"), true);
+            sp.sendOverlayMessage(Component.translatable("omikuji.newyearcountdown.busy"));
             return;
         }
-        startTick = sw.getTime();
-        drawer = sp.getUuid();
+        startTick = sw.getGameTime();
+        drawer = sp.getUUID();
         revealed = false;
         result = Fortunes.pick(new java.util.Random(sw.getRandom().nextLong()));
 
-        sw.playSound(null, pos, ModSounds.OMIKUJI_SUZU, SoundCategory.BLOCKS, 0.9f, 1.0f);
-        sw.playSound(null, pos, ModSounds.OMIKUJI_SHAKE, SoundCategory.BLOCKS, 1.0f, 1.0f);
-        for (ServerPlayerEntity p : PlayerLookup.tracking(sw, pos)) {
-            ServerPlayNetworking.send(p, new OmikujiPackets.AnimS2C(pos, result));
+        sw.playSound(null, worldPosition, ModSounds.OMIKUJI_SUZU, SoundSource.BLOCKS, 0.9f, 1.0f);
+        sw.playSound(null, worldPosition, ModSounds.OMIKUJI_SHAKE, SoundSource.BLOCKS, 1.0f, 1.0f);
+        for (ServerPlayer p : PlayerLookup.tracking(sw, worldPosition)) {
+            ServerPlayNetworking.send(p, new OmikujiPackets.AnimS2C(worldPosition, result));
         }
     }
 
-    private void reveal(ServerWorld sw) {
+    private void reveal(ServerLevel sw) {
         Fortunes.Fortune f = Fortunes.get(result);
-        sw.playSound(null, pos, ModSounds.OMIKUJI_REVEAL, SoundCategory.BLOCKS, 1.0f, f.tier() < 0 ? 0.7f : 1.0f);
-        if (f.tier() == 2) sw.playSound(null, pos, SoundEvents.ENTITY_FIREWORK_ROCKET_TWINKLE, SoundCategory.BLOCKS, 1.0f, 1.0f);
-        if (f.tier() == -2) sw.playSound(null, pos, SoundEvents.ENTITY_WITHER_AMBIENT, SoundCategory.BLOCKS, 0.4f, 1.6f);
+        sw.playSound(null, worldPosition, ModSounds.OMIKUJI_REVEAL, SoundSource.BLOCKS, 1.0f, f.tier() < 0 ? 0.7f : 1.0f);
+        if (f.tier() == 2) sw.playSound(null, worldPosition, SoundEvents.FIREWORK_ROCKET_TWINKLE, SoundSource.BLOCKS, 1.0f, 1.0f);
+        if (f.tier() == -2) sw.playSound(null, worldPosition, SoundEvents.WITHER_AMBIENT, SoundSource.BLOCKS, 0.4f, 1.6f);
 
         spawnParticles(sw);
 
-        ServerPlayerEntity p = drawer == null ? null : sw.getServer().getPlayerManager().getPlayer(drawer);
+        ServerPlayer p = drawer == null ? null : sw.getServer().getPlayerList().getPlayer(drawer);
         if (p == null) return;
 
-        Text name = Text.translatable("omikuji.newyearcountdown.fortune." + f.key()).formatted(f.color(), Formatting.BOLD);
+        Component name = Component.translatable("omikuji.newyearcountdown.fortune." + f.key()).withStyle(f.color(), ChatFormatting.BOLD);
         // 결과는 채팅이 아니라 뽑은 사람 화면에 운세 종이 UI 로 보여 준다
         OmikujiData.Entry saved = OmikujiData.get(sw.getServer())
-                .add(p.getUuid(), result, 1 + sw.getRandom().nextInt(100), System.currentTimeMillis());
+                .add(p.getUUID(), result, 1 + sw.getRandom().nextInt(100), System.currentTimeMillis());
         ServerPlayNetworking.send(p, new OmikujiPackets.ResultS2C(saved.result, saved.number, saved.time));
 
         if (f.tier() == 2) { // 대길은 서버 전체에 알린다
-            sw.getServer().getPlayerManager().broadcast(
-                    Text.translatable("omikuji.newyearcountdown.broadcast", p.getDisplayName(), name), false);
+            sw.getServer().getPlayerList().broadcastSystemMessage(
+                    Component.translatable("omikuji.newyearcountdown.broadcast", p.getDisplayName(), name), false);
         }
     }
 
     /** 결과에 맞는 파티클 연출 (서버가 뿌리면 근처 모두에게 보인다). */
-    private void spawnParticles(ServerWorld sw) {
-        double x = pos.getX() + 0.5, y = pos.getY() + 2.9, z = pos.getZ() + 0.5;
+    private void spawnParticles(ServerLevel sw) {
+        double x = worldPosition.getX() + 0.5, y = worldPosition.getY() + 2.9, z = worldPosition.getZ() + 0.5;
         Fortunes.Fortune f = Fortunes.get(result);
         switch (f.key()) {
             case "daekil" -> { // 대길: 황금빛 폭죽
-                sw.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 50, 0.5, 0.3, 0.5, 0.4);
-                sw.spawnParticles(ParticleTypes.END_ROD, x, y + 0.3, z, 30, 0.8, 0.5, 0.8, 0.05);
+                sw.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 50, 0.5, 0.3, 0.5, 0.4);
+                sw.sendParticles(ParticleTypes.END_ROD, x, y + 0.3, z, 30, 0.8, 0.5, 0.8, 0.05);
             }
-            case "jungil", "sokil" -> sw.spawnParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 24, 0.7, 0.4, 0.7, 0.0);
-            case "malgil" -> sw.spawnParticles(ParticleTypes.END_ROD, x, y, z, 14, 0.5, 0.3, 0.5, 0.02);
-            case "pyeongta" -> sw.spawnParticles(ParticleTypes.CHERRY_LEAVES, x, y + 0.5, z, 30, 0.9, 0.4, 0.9, 0.0);
+            case "jungil", "sokil" -> sw.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 24, 0.7, 0.4, 0.7, 0.0);
+            case "malgil" -> sw.sendParticles(ParticleTypes.END_ROD, x, y, z, 14, 0.5, 0.3, 0.5, 0.02);
+            case "pyeongta" -> sw.sendParticles(ParticleTypes.CHERRY_LEAVES, x, y + 0.5, z, 30, 0.9, 0.4, 0.9, 0.0);
             case "jwejwe" -> { // 대흉
-                sw.spawnParticles(ParticleTypes.SOUL, x, y, z, 20, 0.5, 0.3, 0.5, 0.03);
-                sw.spawnParticles(ParticleTypes.LARGE_SMOKE, x, y, z, 16, 0.5, 0.2, 0.5, 0.02);
+                sw.sendParticles(ParticleTypes.SOUL, x, y, z, 20, 0.5, 0.3, 0.5, 0.03);
+                sw.sendParticles(ParticleTypes.LARGE_SMOKE, x, y, z, 16, 0.5, 0.2, 0.5, 0.02);
             }
-            default -> sw.spawnParticles(ParticleTypes.SMOKE, x, y, z, 20, 0.4, 0.2, 0.4, 0.02);   // 흉 계열
+            default -> sw.sendParticles(ParticleTypes.SMOKE, x, y, z, 20, 0.4, 0.2, 0.4, 0.02);   // 흉 계열
         }
     }
 }

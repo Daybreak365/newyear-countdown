@@ -6,24 +6,23 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.particle.ParticleTypes;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Uuids;
-import net.minecraft.util.math.Vec3d;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.phys.Vec3;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,28 +45,28 @@ public final class Sebae {
     private static final int XP_REWARD = 30;
 
     /** 클라이언트 → 서버: 세배하기. */
-    public record StartC2S() implements CustomPayload {
-        public static final Id<StartC2S> ID = new Id<>(Identifier.of(NewYearCountdown.MOD_ID, "sebae_start"));
-        public static final PacketCodec<RegistryByteBuf, StartC2S> CODEC = PacketCodec.unit(new StartC2S());
-        @Override public Id<? extends CustomPayload> getId() { return ID; }
+    public record StartC2S() implements CustomPacketPayload {
+        public static final Type<StartC2S> ID = new Type<>(Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "sebae_start"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, StartC2S> CODEC = StreamCodec.unit(new StartC2S());
+        @Override public Type<? extends CustomPacketPayload> type() { return ID; }
     }
 
     /** 서버 → 클라이언트: 이 플레이어가 절을 시작(true)/중단(false). */
-    public record StateS2C(UUID player, boolean bowing) implements CustomPayload {
-        public static final Id<StateS2C> ID = new Id<>(Identifier.of(NewYearCountdown.MOD_ID, "sebae_state"));
-        public static final PacketCodec<RegistryByteBuf, StateS2C> CODEC = PacketCodec.tuple(
-                Uuids.PACKET_CODEC, StateS2C::player,
-                PacketCodecs.BOOL, StateS2C::bowing,
+    public record StateS2C(UUID player, boolean bowing) implements CustomPacketPayload {
+        public static final Type<StateS2C> ID = new Type<>(Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "sebae_state"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, StateS2C> CODEC = StreamCodec.composite(
+                UUIDUtil.STREAM_CODEC, StateS2C::player,
+                ByteBufCodecs.BOOL, StateS2C::bowing,
                 StateS2C::new);
-        @Override public Id<? extends CustomPayload> getId() { return ID; }
+        @Override public Type<? extends CustomPacketPayload> type() { return ID; }
     }
 
     private static final class Bow {
         final long start;
-        final Vec3d pos;
+        final Vec3 pos;
         final UUID target;
 
-        Bow(long start, Vec3d pos, UUID target) {
+        Bow(long start, Vec3 pos, UUID target) {
             this.start = start;
             this.pos = pos;
             this.target = target;
@@ -81,35 +80,35 @@ public final class Sebae {
     private Sebae() {}
 
     public static void init() {
-        PayloadTypeRegistry.playC2S().register(StartC2S.ID, StartC2S.CODEC);
-        PayloadTypeRegistry.playS2C().register(StateS2C.ID, StateS2C.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(StartC2S.ID, StartC2S.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(StateS2C.ID, StateS2C.CODEC);
         ServerPlayNetworking.registerGlobalReceiver(StartC2S.ID, (payload, context) -> start(context.player()));
         ServerTickEvents.END_SERVER_TICK.register(Sebae::tick);
     }
 
-    private static void start(ServerPlayerEntity p) {
-        if (ACTIVE.containsKey(p.getUuid())) return;
-        if (!p.isOnGround() || p.hasVehicle() || p.isSleeping() || p.isSwimming() || p.isSpectator() || p.isFallFlying()) {
-            p.sendMessage(Text.translatable("sebae.newyearcountdown.cannot").formatted(Formatting.GRAY), true);
+    private static void start(ServerPlayer p) {
+        if (ACTIVE.containsKey(p.getUUID())) return;
+        if (!p.onGround() || p.isPassenger() || p.isSleeping() || p.isSwimming() || p.isSpectator() || p.isFallFlying()) {
+            p.sendOverlayMessage(Component.translatable("sebae.newyearcountdown.cannot").withStyle(ChatFormatting.GRAY));
             return;
         }
-        ServerWorld sw = (ServerWorld) p.getWorld();
-        ServerPlayerEntity target = facedPlayer(sw, p);
-        ACTIVE.put(p.getUuid(), new Bow(sw.getTime(), p.getPos(), target == null ? null : target.getUuid()));
+        ServerLevel sw = (ServerLevel) p.level();
+        ServerPlayer target = facedPlayer(sw, p);
+        ACTIVE.put(p.getUUID(), new Bow(sw.getGameTime(), p.position(), target == null ? null : target.getUUID()));
         broadcast(p, true);
     }
 
     /** 앞쪽 5칸 안에서 바라보고 있는 플레이어. */
-    private static ServerPlayerEntity facedPlayer(ServerWorld sw, ServerPlayerEntity p) {
-        Vec3d look = p.getRotationVec(1.0f).multiply(1, 0, 1).normalize();
-        ServerPlayerEntity best = null;
+    private static ServerPlayer facedPlayer(ServerLevel sw, ServerPlayer p) {
+        Vec3 look = p.getViewVector(1.0f).multiply(1, 0, 1).normalize();
+        ServerPlayer best = null;
         double bestDot = 0.75;
-        for (ServerPlayerEntity o : sw.getPlayers()) {
+        for (ServerPlayer o : sw.players()) {
             if (o == p || o.isSpectator()) continue;
-            Vec3d to = o.getPos().subtract(p.getPos()).multiply(1, 0, 1);
+            Vec3 to = o.position().subtract(p.position()).multiply(1, 0, 1);
             double d = to.length();
             if (d > 5.0 || d < 0.3) continue;
-            double dot = to.normalize().dotProduct(look);
+            double dot = to.normalize().dot(look);
             if (dot > bestDot) {
                 bestDot = dot;
                 best = o;
@@ -118,10 +117,10 @@ public final class Sebae {
         return best;
     }
 
-    private static void broadcast(ServerPlayerEntity p, boolean bowing) {
-        StateS2C msg = new StateS2C(p.getUuid(), bowing);
+    private static void broadcast(ServerPlayer p, boolean bowing) {
+        StateS2C msg = new StateS2C(p.getUUID(), bowing);
         ServerPlayNetworking.send(p, msg);
-        for (ServerPlayerEntity o : PlayerLookup.tracking(p)) {
+        for (ServerPlayer o : PlayerLookup.tracking(p)) {
             if (o != p) ServerPlayNetworking.send(o, msg);
         }
     }
@@ -130,14 +129,14 @@ public final class Sebae {
         Iterator<Map.Entry<UUID, Bow>> it = ACTIVE.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UUID, Bow> e = it.next();
-            ServerPlayerEntity p = server.getPlayerManager().getPlayer(e.getKey());
+            ServerPlayer p = server.getPlayerList().getPlayer(e.getKey());
             Bow b = e.getValue();
             if (p == null) {
                 it.remove();
                 continue;
             }
-            long age = p.getWorld().getTime() - b.start;
-            boolean moved = p.getPos().squaredDistanceTo(b.pos) > 0.6 * 0.6;
+            long age = p.level().getGameTime() - b.start;
+            boolean moved = p.position().distanceToSqr(b.pos) > 0.6 * 0.6;
             if (moved || age >= Sebae.TOTAL || age < 0) {
                 it.remove();
                 broadcast(p, false);
@@ -148,30 +147,30 @@ public final class Sebae {
     }
 
     /** 가장 깊이 엎드린 순간: 세배 성립. */
-    private static void bowed(MinecraftServer server, ServerPlayerEntity p, Bow b) {
-        ServerWorld sw = (ServerWorld) p.getWorld();
-        ServerPlayerEntity target = b.target == null ? null : server.getPlayerManager().getPlayer(b.target);
-        if (target != null && target.getWorld() != p.getWorld()) target = null;
-        Text msg = target == null
-                ? Text.translatable("sebae.newyearcountdown.alone", p.getDisplayName())
-                : Text.translatable("sebae.newyearcountdown.to", p.getDisplayName(), target.getDisplayName());
-        for (ServerPlayerEntity o : sw.getPlayers(pl -> pl.squaredDistanceTo(p) <= 24 * 24)) {
-            o.sendMessage(msg.copy().formatted(Formatting.GOLD), false);
+    private static void bowed(MinecraftServer server, ServerPlayer p, Bow b) {
+        ServerLevel sw = (ServerLevel) p.level();
+        ServerPlayer target = b.target == null ? null : server.getPlayerList().getPlayer(b.target);
+        if (target != null && target.level() != p.level()) target = null;
+        Component msg = target == null
+                ? Component.translatable("sebae.newyearcountdown.alone", p.getDisplayName())
+                : Component.translatable("sebae.newyearcountdown.to", p.getDisplayName(), target.getDisplayName());
+        for (ServerPlayer o : sw.getPlayers(pl -> pl.distanceToSqr(p) <= 24 * 24)) {
+            o.sendSystemMessage(msg.copy().withStyle(ChatFormatting.GOLD));
         }
-        sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.BLOCK_WOOL_PLACE, SoundCategory.PLAYERS, 0.8f, 0.8f);
-        sw.spawnParticles(ParticleTypes.HAPPY_VILLAGER, p.getX(), p.getY() + 0.6, p.getZ(), 8, 0.5, 0.3, 0.5, 0.0);
+        sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.WOOL_PLACE, SoundSource.PLAYERS, 0.8f, 0.8f);
+        sw.sendParticles(ParticleTypes.HAPPY_VILLAGER, p.getX(), p.getY() + 0.6, p.getZ(), 8, 0.5, 0.3, 0.5, 0.0);
         if (target == null) return;
 
-        sw.spawnParticles(ParticleTypes.HEART, target.getX(), target.getEyeY() + 0.5, target.getZ(), 5, 0.3, 0.2, 0.3, 0.0);
-        String key = p.getUuid() + "|" + target.getUuid() + "|" + LocalDate.now(CountdownConfig.get().zoneId());
+        sw.sendParticles(ParticleTypes.HEART, target.getX(), target.getEyeY() + 0.5, target.getZ(), 5, 0.3, 0.2, 0.3, 0.0);
+        String key = p.getUUID() + "|" + target.getUUID() + "|" + LocalDate.now(CountdownConfig.get().zoneId());
         if (!REWARDED.add(key)) {
-            p.sendMessage(Text.translatable("sebae.newyearcountdown.already", target.getDisplayName()).formatted(Formatting.GRAY), true);
+            p.sendOverlayMessage(Component.translatable("sebae.newyearcountdown.already", target.getDisplayName()).withStyle(ChatFormatting.GRAY));
             return;
         }
-        p.addExperience(XP_REWARD);
-        target.addStatusEffect(new StatusEffectInstance(StatusEffects.LUCK, 20 * 60 * 5, 0));
-        sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, SoundCategory.PLAYERS, 0.8f, 1.2f);
-        p.sendMessage(Text.translatable("sebae.newyearcountdown.reward", XP_REWARD).formatted(Formatting.YELLOW), true);
-        target.sendMessage(Text.translatable("sebae.newyearcountdown.received", p.getDisplayName()).formatted(Formatting.YELLOW), true);
+        p.giveExperiencePoints(XP_REWARD);
+        target.addEffect(new MobEffectInstance(MobEffects.LUCK, 20 * 60 * 5, 0));
+        sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 0.8f, 1.2f);
+        p.sendOverlayMessage(Component.translatable("sebae.newyearcountdown.reward", XP_REWARD).withStyle(ChatFormatting.YELLOW));
+        target.sendOverlayMessage(Component.translatable("sebae.newyearcountdown.received", p.getDisplayName()).withStyle(ChatFormatting.YELLOW));
     }
 }

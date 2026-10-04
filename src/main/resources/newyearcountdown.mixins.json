@@ -2,17 +2,15 @@
   "required": true,
   "minVersion": "0.8",
   "package": "dev.newyear.countdown.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_25",
   "client": [
     "CameraMixin",
     "HandledScreenAccessor",
     "EntityMixin",
-    "PlayerEntityModelMixin",
-    "PlayerModelDataMixin",
-    "ArmorModelDataMixin",
-    "BipedEntityModelMixin",
-    "HeldItemRendererMixin",
-    "PlayerEntityRendererMixin"
+    "HumanoidModelMixin",
+    "PlayerModelMixin",
+    "AvatarRendererMixin",
+    "FirstPersonHandsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

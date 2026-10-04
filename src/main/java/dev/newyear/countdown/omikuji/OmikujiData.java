@@ -1,13 +1,14 @@
 package dev.newyear.countdown.omikuji;
 
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.registry.RegistryWrapper;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.PersistentStateManager;
-
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
+import net.minecraft.core.UUIDUtil;
+import dev.newyear.countdown.ModReg;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -19,7 +20,7 @@ import java.util.UUID;
  * 이 월드(서버)에서 뽑은 것만 들어 있으므로 다른 서버나 맵과 섞이지 않고, 접속한 기기가 달라도 같다.
  * 목록의 첫 번째(0번)가 "첫 뽑기(메인)"이고 나머지는 추가 뽑기다.
  */
-public class OmikujiData extends PersistentState {
+public class OmikujiData extends SavedData {
     public static final class Entry {
         public final int result;
         public final int number;
@@ -33,14 +34,13 @@ public class OmikujiData extends PersistentState {
     }
 
     private static final int MAX = 50;
-    private static final String KEY = "newyearcountdown_omikuji";
-    private static final Type<OmikujiData> TYPE = new Type<>(OmikujiData::new, OmikujiData::fromNbt, null);
+    private static final SavedDataType<OmikujiData> TYPE = new SavedDataType<>(ModReg.id("omikuji"), OmikujiData::new,
+            CompoundTag.CODEC.xmap(OmikujiData::fromNbt, OmikujiData::toNbt), null);
 
     private final Map<UUID, List<Entry>> byPlayer = new HashMap<>();
 
     public static OmikujiData get(MinecraftServer server) {
-        PersistentStateManager mgr = server.getOverworld().getPersistentStateManager();
-        return mgr.getOrCreate(TYPE, KEY);
+        return server.getDataStorage().computeIfAbsent(TYPE);
     }
 
     public List<Entry> of(UUID id) {
@@ -53,19 +53,19 @@ public class OmikujiData extends PersistentState {
         Entry e = new Entry(result, number, time);
         list.add(e);
         while (list.size() > MAX) list.remove(1);
-        markDirty();
+        setDirty();
         return e;
     }
 
-    @Override
-    public NbtCompound writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
-        NbtList players = new NbtList();
+    private CompoundTag toNbt() {
+        CompoundTag nbt = new CompoundTag();
+        ListTag players = new ListTag();
         for (Map.Entry<UUID, List<Entry>> pe : byPlayer.entrySet()) {
-            NbtCompound p = new NbtCompound();
-            p.putUuid("Id", pe.getKey());
-            NbtList list = new NbtList();
+            CompoundTag p = new CompoundTag();
+            p.store("Id", UUIDUtil.CODEC, pe.getKey());
+            ListTag list = new ListTag();
             for (Entry e : pe.getValue()) {
-                NbtCompound c = new NbtCompound();
+                CompoundTag c = new CompoundTag();
                 c.putInt("R", e.result);
                 c.putInt("N", e.number);
                 c.putLong("T", e.time);
@@ -78,19 +78,20 @@ public class OmikujiData extends PersistentState {
         return nbt;
     }
 
-    public static OmikujiData fromNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
+    private static OmikujiData fromNbt(CompoundTag nbt) {
         OmikujiData data = new OmikujiData();
-        NbtList players = nbt.getList("Players", NbtElement.COMPOUND_TYPE);
+        ListTag players = nbt.getListOrEmpty("Players");
         for (int i = 0; i < players.size(); i++) {
-            NbtCompound p = players.getCompound(i);
-            if (!p.containsUuid("Id")) continue;
+            CompoundTag p = players.getCompoundOrEmpty(i);
+            UUID id = p.read("Id", UUIDUtil.CODEC).orElse(null);
+            if (id == null) continue;
             List<Entry> list = new ArrayList<>();
-            NbtList entries = p.getList("Entries", NbtElement.COMPOUND_TYPE);
+            ListTag entries = p.getListOrEmpty("Entries");
             for (int k = 0; k < entries.size(); k++) {
-                NbtCompound c = entries.getCompound(k);
-                list.add(new Entry(c.getInt("R"), c.getInt("N"), c.getLong("T")));
+                CompoundTag c = entries.getCompoundOrEmpty(k);
+                list.add(new Entry(c.getIntOr("R", 0), c.getIntOr("N", 0), c.getLongOr("T", 0L)));
             }
-            data.byPlayer.put(p.getUuid("Id"), list);
+            data.byPlayer.put(id, list);
         }
         return data;
     }

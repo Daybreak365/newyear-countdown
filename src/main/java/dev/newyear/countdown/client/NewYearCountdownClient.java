@@ -1,5 +1,6 @@
 package dev.newyear.countdown.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.newyear.countdown.SyncPayload;
 import dev.newyear.countdown.bell.BellPackets;
 import dev.newyear.countdown.bell.BellUsers;
@@ -13,27 +14,27 @@ import dev.newyear.countdown.wish.WishPackets;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
-import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.render.block.entity.BlockEntityRendererFactories;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.util.math.BlockPos;
-import org.lwjgl.glfw.GLFW;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import dev.newyear.countdown.ModReg;
 
 public class NewYearCountdownClient implements ClientModInitializer {
-    private static KeyBinding openSettings;
-    private static KeyBinding openWishes;
-    private static KeyBinding sebae;
+    private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(ModReg.id("main"));
+    private static KeyMapping openSettings;
+    private static KeyMapping openWishes;
+    private static KeyMapping sebae;
 
     @Override
     public void onInitializeClient() {
@@ -52,36 +53,36 @@ public class NewYearCountdownClient implements ClientModInitializer {
         });
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> DebugAccess.sendAuth());
 
-        HudRenderCallback.EVENT.register(CountdownHud::render);
-        HudRenderCallback.EVENT.register(BellSession::renderHud);
-        HudRenderCallback.EVENT.register(OmikujiHud::render);
+        HudElementRegistry.addLast(ModReg.id("countdown"), CountdownHud::render);
+        HudElementRegistry.addLast(ModReg.id("bell"), BellSession::renderHud);
+        HudElementRegistry.addLast(ModReg.id("omikuji"), OmikujiHud::render);
 
         // 오미쿠지 칸: 한 번이라도 받았다면 인벤토리 옆에 나타난다
         ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
-            if (screen instanceof InventoryScreen || screen instanceof CreativeInventoryScreen) {
-                net.minecraft.client.gui.screen.ingame.HandledScreen<?> hs = (net.minecraft.client.gui.screen.ingame.HandledScreen<?>) screen;
-                if (OmikujiBook.size() > 0) Screens.getButtons(screen).add(new OmikujiSlotWidget(hs));
-                if (WishBook.size() > 0) Screens.getButtons(screen).add(new WishSlotWidget(hs));
+            if (screen instanceof InventoryScreen || screen instanceof CreativeModeInventoryScreen) {
+                net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?> hs = (net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>) screen;
+                if (OmikujiBook.size() > 0) Screens.getWidgets(screen).add(new OmikujiSlotWidget(hs));
+                if (WishBook.size() > 0) Screens.getWidgets(screen).add(new WishSlotWidget(hs));
             }
         });
 
         // 보신각: 렌더러 + 패킷 처리
-        BlockEntityRendererFactories.register(ModBlocks.BELL_BE, BellRenderer::new);
-        BlockEntityRendererFactories.register(OmikujiBlocks.OMIKUJI_BE, OmikujiRenderer::new);
-        BlockEntityRendererFactories.register(dev.newyear.countdown.gacha.GachaBlocks.GACHA_BE, GachaRenderer::new);
-        BlockEntityRendererFactories.register(dev.newyear.countdown.gacha.Souvenirs.YUT_BE, YutBoardRenderer::new);
+        BlockEntityRenderers.register(ModBlocks.BELL_BE, BellRenderer::new);
+        BlockEntityRenderers.register(OmikujiBlocks.OMIKUJI_BE, OmikujiRenderer::new);
+        BlockEntityRenderers.register(dev.newyear.countdown.gacha.GachaBlocks.GACHA_BE, GachaRenderer::new);
+        BlockEntityRenderers.register(dev.newyear.countdown.gacha.Souvenirs.YUT_BE, YutBoardRenderer::new);
         ItemAnim.register();   // 캡슐/기념품 모델 상태 전환 (흔들림·열림·불꽃…)
         ClientPlayNetworking.registerGlobalReceiver(OmikujiPackets.AnimS2C.ID, (payload, context) -> {
-            MinecraftClient mc = context.client();
-            if (mc.world != null && mc.world.getBlockEntity(payload.pos()) instanceof OmikujiBlockEntity be) {
-                be.animStart = mc.world.getTime();
+            Minecraft mc = context.client();
+            if (mc.level != null && mc.level.getBlockEntity(payload.pos()) instanceof OmikujiBlockEntity be) {
+                be.animStart = mc.level.getGameTime();
                 be.animResult = payload.result();
             }
         });
         ClientPlayNetworking.registerGlobalReceiver(OmikujiPackets.ResultS2C.ID, (payload, context) -> {
             OmikujiBook.Entry e = new OmikujiBook.Entry(payload.result(), payload.number(), payload.time());
             int idx = OmikujiBook.add(e);               // 시간순 인덱스: 0 = 첫 뽑기, 1.. = 추가 뽑기 회차
-            context.client().setScreen(new OmikujiResultScreen(e, idx));
+            context.client().gui.setScreen(new OmikujiResultScreen(e, idx));
         });
         ClientPlayNetworking.registerGlobalReceiver(OmikujiPackets.BookS2C.ID, (payload, context) -> {
             java.util.List<OmikujiBook.Entry> list = new java.util.ArrayList<>();
@@ -94,7 +95,7 @@ public class NewYearCountdownClient implements ClientModInitializer {
         });
         // 소원 연등
         EntityRendererRegistry.register(WishEntities.LANTERN, WishLanternRenderer::new);
-        ClientPlayNetworking.registerGlobalReceiver(WishPackets.OpenS2C.ID, (payload, context) -> context.client().setScreen(new WishScreen()));
+        ClientPlayNetworking.registerGlobalReceiver(WishPackets.OpenS2C.ID, (payload, context) -> context.client().gui.setScreen(new WishScreen()));
         ClientPlayNetworking.registerGlobalReceiver(WishPackets.BookS2C.ID, (payload, context) -> {
             java.util.List<WishBook.Wish> list = new java.util.ArrayList<>();
             int n = Math.min(payload.texts().size(), payload.times().size());
@@ -113,43 +114,43 @@ public class NewYearCountdownClient implements ClientModInitializer {
             BosingakBellBlockEntity bell = bellAt(context.client(), payload.pos());
             if (bell != null) bell.onRingClient(payload.strength());
         });
-        WorldRenderEvents.AFTER_ENTITIES.register(BellPreview::render);
+        LevelRenderEvents.COLLECT_SUBMITS.register(BellPreview::render);
         ClientTickEvents.START_CLIENT_TICK.register(BellSession::tick);
         ClientTickEvents.END_CLIENT_TICK.register(BellSession::follow);
 
         // 조작(Controls)에 등록되는 키. 기본값은 미지정.
-        openSettings = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.newyearcountdown.settings", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN,
-                "key.categories.newyearcountdown"));
-        openWishes = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.newyearcountdown.wishes", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN,
-                "key.categories.newyearcountdown"));
-        sebae = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.newyearcountdown.sebae", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_B,
-                "key.categories.newyearcountdown"));
+        openSettings = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.newyearcountdown.settings", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(),
+                CATEGORY));
+        openWishes = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.newyearcountdown.wishes", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(),
+                CATEGORY));
+        sebae = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.newyearcountdown.sebae", InputConstants.Type.KEYBOARD, InputConstants.KEY_B,
+                CATEGORY));
         ClientPlayNetworking.registerGlobalReceiver(dev.newyear.countdown.sebae.Sebae.StateS2C.ID, (payload, context) -> {
             if (payload.bowing()) SebaePose.start(payload.player());
             else SebaePose.stop(payload.player());
         });
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             CountdownTicker.tick(client);
-            while (openWishes.wasPressed()) {
-                if (WishBook.size() > 0 && client.currentScreen == null) client.setScreen(new WishBookScreen());
+            while (openWishes.consumeClick()) {
+                if (WishBook.size() > 0 && client.gui.screen() == null) client.gui.setScreen(new WishBookScreen());
             }
-            while (sebae.wasPressed()) {
-                if (client.currentScreen == null && client.player != null) {
+            while (sebae.consumeClick()) {
+                if (client.gui.screen() == null && client.player != null) {
                     ClientPlayNetworking.send(new dev.newyear.countdown.sebae.Sebae.StartC2S());
                 }
             }
-            while (openSettings.wasPressed()) {
-                client.setScreen(new SettingsScreen(client.currentScreen));
+            while (openSettings.consumeClick()) {
+                client.gui.setScreen(new SettingsScreen(client.gui.screen()));
             }
         });
     }
 
-    private static BosingakBellBlockEntity bellAt(MinecraftClient mc, BlockPos pos) {
-        if (mc.world == null) return null;
-        BlockEntity be = mc.world.getBlockEntity(pos);
+    private static BosingakBellBlockEntity bellAt(Minecraft mc, BlockPos pos) {
+        if (mc.level == null) return null;
+        BlockEntity be = mc.level.getBlockEntity(pos);
         return be instanceof BosingakBellBlockEntity b ? b : null;
     }
 }

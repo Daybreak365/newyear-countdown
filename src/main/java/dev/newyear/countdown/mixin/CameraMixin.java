@@ -2,11 +2,10 @@ package dev.newyear.countdown.mixin;
 
 import dev.newyear.countdown.client.BellCamera;
 import dev.newyear.countdown.client.SebaePose;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.client.render.Camera;
-import net.minecraft.entity.Entity;
-import net.minecraft.world.BlockView;
+import net.minecraft.client.Camera;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,30 +16,35 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Camera.class)
 public abstract class CameraMixin {
     @Shadow
-    protected abstract void setRotation(float yaw, float pitch);
+    private Entity entity;
 
     @Shadow
-    protected abstract void setPos(double x, double y, double z);
+    private boolean detached;
 
-    @Inject(method = "update", at = @At("RETURN"))
-    private void newyearcountdown$overrideCamera(BlockView area, Entity focusedEntity, boolean thirdPerson,
-                                                 boolean inverseView, float tickDelta, CallbackInfo ci) {
+    @Shadow
+    protected abstract void setRotation(float yRot, float xRot);
+
+    @Shadow
+    protected abstract void setPosition(double x, double y, double z);
+
+    @Inject(method = "alignWithEntity", at = @At("TAIL"))
+    private void newyearcountdown$overrideCamera(float partialTicks, CallbackInfo ci) {
         Camera self = (Camera) (Object) this;
         if (!BellCamera.isActive()) {
-            if (thirdPerson || focusedEntity == null) return;
-            float[] off = SebaePose.cameraOffset(focusedEntity.getUuid());
+            if (detached || entity == null) return;
+            float[] off = SebaePose.cameraOffset(entity.getUUID());
             if (off == null) return;
-            float yaw = self.getYaw();
-            Vec3d p = self.getPos();
-            double fx = -MathHelper.sin(yaw * MathHelper.RADIANS_PER_DEGREE) * off[1];
-            double fz = MathHelper.cos(yaw * MathHelper.RADIANS_PER_DEGREE) * off[1];
-            setRotation(yaw, MathHelper.lerp(off[2] * 0.8f, self.getPitch(), 75f));
-            setPos(p.x + fx, p.y - off[0], p.z + fz);
+            float yaw = self.yRot();
+            Vec3 p = self.position();
+            double fx = -Mth.sin(yaw * Mth.DEG_TO_RAD) * off[1];
+            double fz = Mth.cos(yaw * Mth.DEG_TO_RAD) * off[1];
+            setRotation(yaw, Mth.lerp(off[2] * 0.8f, self.xRot(), 75f));
+            setPosition(p.x + fx, p.y - off[0], p.z + fz);
             return;
         }
-        double[] pose = BellCamera.compute(self.getPos(), self.getYaw(), self.getPitch(), tickDelta);
+        double[] pose = BellCamera.compute(self.position(), self.yRot(), self.xRot(), partialTicks);
         if (pose == null) return;
         setRotation((float) pose[3], (float) pose[4]);
-        setPos(pose[0], pose[1], pose[2]);
+        setPosition(pose[0], pose[1], pose[2]);
     }
 }

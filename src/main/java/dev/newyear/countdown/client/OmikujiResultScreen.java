@@ -1,10 +1,10 @@
 package dev.newyear.countdown.client;
 
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 
 /**
  * 뽑은 운세를 보여 주는 화면. 종이가 펼쳐지고 "받기" 를 누르거나 화면을 닫으면
@@ -18,47 +18,47 @@ public class OmikujiResultScreen extends Screen {
     private float scale = 1f, cx, cy;
 
     public OmikujiResultScreen(OmikujiBook.Entry entry, int extraNo) {
-        super(Text.translatable("omikuji.newyearcountdown.ui.title"));
+        super(Component.translatable("omikuji.newyearcountdown.ui.title"));
         this.entry = entry;
         this.extraNo = extraNo;
     }
 
     @Override
     protected void init() {
-        scale = MathHelper.clamp((height - 56) / (float) OmikujiPaper.H, 0.5f, 1.6f);
+        scale = Mth.clamp((height - 56) / (float) OmikujiPaper.H, 0.5f, 1.6f);
         cx = width / 2f;
         cy = (height - 26) / 2f;
         int by = (int) (cy + OmikujiPaper.H * scale / 2f) + 6;
-        addDrawableChild(ButtonWidget.builder(Text.translatable("omikuji.newyearcountdown.ui.collect"), b -> close())
-                .dimensions(width / 2 - 50, Math.min(by, height - 24), 100, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("omikuji.newyearcountdown.ui.collect"), b -> onClose())
+                .bounds(width / 2 - 50, Math.min(by, height - 24), 100, 20).build());
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        super.render(ctx, mouseX, mouseY, delta);
-        float t = MathHelper.clamp((System.nanoTime() - openNanos) / 1.0e9f / 0.45f, 0f, 1f);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
+        float t = Mth.clamp((System.nanoTime() - openNanos) / 1.0e9f / 0.45f, 0f, 1f);
         float ease = 1f - (1f - t) * (1f - t) * (1f - t);
         // 위에서 아래로 펼쳐지는 종이: 위쪽을 고정하고 세로로 늘린다
         float top = cy - OmikujiPaper.H * scale / 2f;
         float sy = scale * (0.06f + 0.94f * ease);
-        ctx.getMatrices().push();
-        ctx.getMatrices().translate(cx, top + OmikujiPaper.H * sy / 2f, 0);
-        ctx.getMatrices().scale(scale, sy, 1f);
-        OmikujiPaper.draw(ctx, textRenderer, entry, 0.4f + 0.6f * ease, extraNo);
-        ctx.getMatrices().pop();
+        ctx.pose().pushMatrix();
+        ctx.pose().translate(cx, top + OmikujiPaper.H * sy / 2f);
+        ctx.pose().scale(scale, sy);
+        OmikujiPaper.draw(ctx, font, entry, 0.4f + 0.6f * ease, extraNo);
+        ctx.pose().popMatrix();
     }
 
     @Override
-    public void close() {
+    public void onClose() {
         if (!collected) {
             collected = true;
             OmikujiHud.startFlight(entry, extraNo, cx, cy, scale);
         }
-        super.close();
+        super.onClose();
     }
 }

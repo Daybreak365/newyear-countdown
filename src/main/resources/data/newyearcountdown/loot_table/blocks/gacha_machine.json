@@ -6,16 +6,14 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "newyearcountdown:gacha_machine",
-          "conditions": [
-            {
-              "condition": "minecraft:block_state_property",
-              "block": "newyearcountdown:gacha_machine",
-              "properties": {
-                "half": "lower"
-              }
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "newyearcountdown:gacha_machine",
+            "state": {
+              "half": "lower"
             }
-          ]
+          },
+          "name": "newyearcountdown:gacha_machine"
         }
       ]
     }

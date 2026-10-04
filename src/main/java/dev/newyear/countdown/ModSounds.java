@@ -1,9 +1,9 @@
 package dev.newyear.countdown;
 
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvent;
 
 /** 모드 사운드. 실제 오디오는 assets/newyearcountdown/sounds/*.ogg, 정의는 sounds.json. */
 public final class ModSounds {
@@ -19,8 +19,8 @@ public final class ModSounds {
     private ModSounds() {}
 
     private static SoundEvent register(String name) {
-        Identifier id = Identifier.of(NewYearCountdown.MOD_ID, name);
-        return Registry.register(Registries.SOUND_EVENT, id, SoundEvent.of(id));
+        Identifier id = Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, name);
+        return Registry.register(BuiltInRegistries.SOUND_EVENT, id, SoundEvent.createVariableRangeEvent(id));
     }
 
     /** 클래스 로딩을 강제해 등록을 수행한다. */

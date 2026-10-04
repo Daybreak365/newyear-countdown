@@ -1,79 +1,71 @@
 package dev.newyear.countdown.omikuji;
 
-import com.mojang.serialization.MapCodec;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.BlockWithEntity;
-import net.minecraft.block.HorizontalFacingBlock;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.BlockEntityTicker;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.state.StateManager;
-import net.minecraft.state.property.DirectionProperty;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.phys.BlockHitResult;
 
 /** 오미쿠지 뽑기대 마스터 블록 (블록 엔티티 보유, 모습은 렌더러가 그림). */
-public class OmikujiBlock extends BlockWithEntity {
-    public static final MapCodec<OmikujiBlock> CODEC = createCodec(OmikujiBlock::new);
-    public static final DirectionProperty FACING = HorizontalFacingBlock.FACING;
+public class OmikujiBlock extends BaseEntityBlock {
+    public static final EnumProperty<Direction> FACING = HorizontalDirectionalBlock.FACING;
 
-    public OmikujiBlock(Settings settings) {
+    public OmikujiBlock(Properties settings) {
         super(settings);
-        setDefaultState(getStateManager().getDefaultState().with(FACING, Direction.NORTH));
+        registerDefaultState(getStateDefinition().any().setValue(FACING, Direction.NORTH));
     }
 
     @Override
-    protected MapCodec<? extends BlockWithEntity> getCodec() {
-        return CODEC;
-    }
-
-    @Override
-    protected void appendProperties(StateManager.Builder<Block, BlockState> builder) {
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(FACING);
     }
 
     @Override
-    public BlockState getPlacementState(ItemPlacementContext ctx) {
-        return getDefaultState().with(FACING, ctx.getHorizontalPlayerFacing().getOpposite());
+    public BlockState getStateForPlacement(BlockPlaceContext ctx) {
+        return defaultBlockState().setValue(FACING, ctx.getHorizontalDirection().getOpposite());
     }
 
     @Override
-    public BlockEntity createBlockEntity(BlockPos pos, BlockState state) {
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
         return new OmikujiBlockEntity(pos, state);
     }
 
     @Override
-    protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit) {
-        if (world.isClient) return ActionResult.SUCCESS;
-        if (world.getBlockEntity(pos) instanceof OmikujiBlockEntity be && player instanceof ServerPlayerEntity sp) {
+    protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
+        if (world.isClientSide()) return InteractionResult.SUCCESS;
+        if (world.getBlockEntity(pos) instanceof OmikujiBlockEntity be && player instanceof ServerPlayer sp) {
             be.draw(sp);
         }
-        return ActionResult.SUCCESS;
+        return InteractionResult.SUCCESS;
     }
 
     @Override
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(World world, BlockState state, BlockEntityType<T> type) {
-        return validateTicker(type, OmikujiBlocks.OMIKUJI_BE, OmikujiBlockEntity::tick);
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
+        return createTickerHelper(type, OmikujiBlocks.OMIKUJI_BE, OmikujiBlockEntity::tick);
     }
 
     @Override
-    public BlockState onBreak(World world, BlockPos pos, BlockState state, PlayerEntity player) {
-        OmikujiLayout.collapseByPlayer(world, pos, state.get(FACING), player);
-        return super.onBreak(world, pos, state, player);
+    public BlockState playerWillDestroy(Level world, BlockPos pos, BlockState state, Player player) {
+        OmikujiLayout.collapseByPlayer(world, pos, state.getValue(FACING), player);
+        return super.playerWillDestroy(world, pos, state, player);
     }
 
     @Override
-    protected void onStateReplaced(BlockState state, World world, BlockPos pos, BlockState newState, boolean moved) {
-        if (!state.isOf(newState.getBlock())) {
-            OmikujiLayout.collapse(world, pos, state.get(FACING), true);
-        }
-        super.onStateReplaced(state, world, pos, newState, moved);
+    protected void affectNeighborsAfterRemoval(BlockState state, ServerLevel world, BlockPos pos, boolean moved) {
+        OmikujiLayout.collapse(world, pos, state.getValue(FACING), true);
+        super.affectNeighborsAfterRemoval(state, world, pos, moved);
     }
 }

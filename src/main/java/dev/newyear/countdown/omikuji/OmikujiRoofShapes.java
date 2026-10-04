@@ -1,10 +1,9 @@
 package dev.newyear.countdown.omikuji;
 
-import net.minecraft.util.shape.VoxelShape;
-import net.minecraft.util.shape.VoxelShapes;
-
 import java.util.HashMap;
 import java.util.Map;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * 오미쿠지 지붕 칸의 충돌 모양: 보이는 계단식 지붕(0.14 단차)과 같다. 좌우 대칭이라 방향 회전이 필요 없다.
@@ -31,7 +30,7 @@ public final class OmikujiRoofShapes {
     }
 
     private static VoxelShape build(int lx, int ly, int lz) {
-        VoxelShape out = VoxelShapes.empty();
+        VoxelShape out = Shapes.empty();
         for (double[] b : BOXES) {
             double x0 = Math.max(CX - b[0], lx - 0.5), x1 = Math.min(CX + b[0], lx + 0.5);
             double z0 = Math.max(-b[1], lz - 0.5), z1 = Math.min(b[1], lz + 0.5);
@@ -41,7 +40,7 @@ public final class OmikujiRoofShapes {
             double ax = x0 - (lx - 0.5), bx = x1 - (lx - 0.5);
             double az = z0 - (lz - 0.5), bz = z1 - (lz - 0.5);
             double ay = y0 - ly, by = y1 - ly;
-            out = VoxelShapes.union(out, VoxelShapes.cuboid(ax, ay, az, bx, by, bz));
+            out = Shapes.or(out, Shapes.box(ax, ay, az, bx, by, bz));
         }
         return out;
     }

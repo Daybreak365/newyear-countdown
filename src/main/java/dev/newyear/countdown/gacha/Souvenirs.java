@@ -1,37 +1,35 @@
 package dev.newyear.countdown.gacha;
 
-import dev.newyear.countdown.NewYearCountdown;
+import dev.newyear.countdown.ModReg;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.Consumables;
+import net.minecraft.world.item.consume_effects.ApplyStatusEffectsConsumeEffect;
+import net.minecraft.world.item.equipment.EquipmentAsset;
+import net.minecraft.world.item.equipment.EquipmentAssets;
+import net.minecraft.world.item.equipment.Equippable;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.block.AbstractBlock;
-import net.minecraft.block.Block;
-import net.minecraft.block.MapColor;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.block.piston.PistonBehavior;
-import net.minecraft.component.type.FoodComponent;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.sound.BlockSoundGroup;
-import net.minecraft.item.ArmorItem;
-import net.minecraft.item.ArmorMaterial;
-import net.minecraft.item.Item;
-import net.minecraft.recipe.Ingredient;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Rarity;
-import net.minecraft.util.Util;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Rarity;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.level.material.PushReaction;
 import java.util.ArrayList;
-import java.util.EnumMap;
+import java.util.function.Function;
 import java.util.List;
 
 /** 캡슐에서 나오는 새해 기념품 목록과 확률. */
@@ -41,56 +39,48 @@ public final class Souvenirs {
     public static final List<Entry> ALL = new ArrayList<>();
     private static int totalWeight;
 
-    /** 몸에 쓰는 2027 안경 (머리 칸에 장착). 갑옷 수치는 모두 0. */
-    public static final RegistryEntry<ArmorMaterial> GLASSES_MATERIAL = Registry.registerReference(
-            Registries.ARMOR_MATERIAL, id("party_glasses"),
-            new ArmorMaterial(Util.make(new EnumMap<>(ArmorItem.Type.class), m -> {
-                for (ArmorItem.Type t : ArmorItem.Type.values()) m.put(t, 0);
-            }), 1, SoundEvents.ITEM_ARMOR_EQUIP_GENERIC, () -> Ingredient.EMPTY,
-                    List.of(new ArmorMaterial.Layer(id("party_glasses"))), 0f, 0f));
+    /** 2027 안경의 착용 텍스처 (assets/newyearcountdown/equipment/party_glasses.json). */
+    public static final ResourceKey<EquipmentAsset> GLASSES_ASSET = ResourceKey.create(EquipmentAssets.ROOT_ID, ModReg.id("party_glasses"));
 
-    public static final Item GLASSES = add("party_glasses",
-            new ArmorItem(GLASSES_MATERIAL, ArmorItem.Type.HELMET, new Item.Settings().maxCount(1).rarity(Rarity.RARE)), 12);
-    public static final Item LUCKY_POUCH = add("lucky_pouch", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.POUCH), 16);
+    /** 몸에 쓰는 2027 안경 (머리 칸에 장착, 방어력 없음). */
+    public static final Item GLASSES = add("party_glasses", Item::new, new Item.Properties().stacksTo(1).rarity(Rarity.RARE)
+            .component(DataComponents.EQUIPPABLE, Equippable.builder(EquipmentSlot.HEAD)
+                    .setEquipSound(SoundEvents.ARMOR_EQUIP_GENERIC).setAsset(GLASSES_ASSET).build()), 12);
+    public static final Item LUCKY_POUCH = add("lucky_pouch", p -> new SouvenirItem(p, SouvenirItem.Kind.POUCH), new Item.Properties(), 16);
 
-    public static final Item RED_ENVELOPE = add("red_envelope", new SouvenirItem(new Item.Settings(), SouvenirItem.Kind.ENVELOPE), 15);
-    public static final Item MINI_CALENDAR = add("mini_calendar", new SouvenirItem(new Item.Settings().maxCount(1), SouvenirItem.Kind.CALENDAR), 15);
-    public static final Item FIRECRACKER = add("firecracker_keychain", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.FIRECRACKER), 12);
-    public static final Item CHAMPAGNE = add("champagne", new SouvenirItem(new Item.Settings().rarity(Rarity.UNCOMMON), SouvenirItem.Kind.CHAMPAGNE), 11);
-    public static final Item GOLD_BADGE = add("golden_badge", new SouvenirItem(new Item.Settings().rarity(Rarity.EPIC).maxCount(1)
-            .component(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true), SouvenirItem.Kind.BADGE), 4);
+    public static final Item RED_ENVELOPE = add("red_envelope", p -> new SouvenirItem(p, SouvenirItem.Kind.ENVELOPE), new Item.Properties(), 15);
+    public static final Item MINI_CALENDAR = add("mini_calendar", p -> new SouvenirItem(p, SouvenirItem.Kind.CALENDAR), new Item.Properties().stacksTo(1), 15);
+    public static final Item FIRECRACKER = add("firecracker_keychain", p -> new SouvenirItem(p, SouvenirItem.Kind.FIRECRACKER), new Item.Properties().rarity(Rarity.UNCOMMON), 12);
+    public static final Item CHAMPAGNE = add("champagne", p -> new SouvenirItem(p, SouvenirItem.Kind.CHAMPAGNE), new Item.Properties().rarity(Rarity.UNCOMMON), 11);
+    public static final Item GOLD_BADGE = add("golden_badge", p -> new SouvenirItem(p, SouvenirItem.Kind.BADGE), new Item.Properties().rarity(Rarity.EPIC).stacksTo(1)
+            .component(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true), 4);
 
-    public static final Item TTEOKGUK = add("tteokguk", new TteokgukItem(new Item.Settings().maxCount(16).food(
-            new FoodComponent.Builder().nutrition(10).saturationModifier(0.9f).alwaysEdible()
-                    .statusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 20 * 8, 1), 1.0f)
-                    .statusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 20 * 120, 1), 1.0f)
-                    .build())), 14);
-    public static final Item KITE = add("kite", new SouvenirItem(new Item.Settings().maxCount(1).rarity(Rarity.UNCOMMON), SouvenirItem.Kind.KITE), 10);
+    public static final Item TTEOKGUK = add("tteokguk", TteokgukItem::new, new Item.Properties().stacksTo(16).usingConvertsTo(Items.BOWL).food(
+            new FoodProperties.Builder().nutrition(10).saturationModifier(0.9f).alwaysEdible().build(),
+            Consumables.defaultFood().onConsume(new ApplyStatusEffectsConsumeEffect(List.of(
+                    new MobEffectInstance(MobEffects.REGENERATION, 20 * 8, 1),
+                    new MobEffectInstance(MobEffects.ABSORPTION, 20 * 120, 1)))).build()), 14);
+    public static final Item KITE = add("kite", p -> new SouvenirItem(p, SouvenirItem.Kind.KITE), new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON), 10);
 
     /** 윷 세트: 바닥에 까는 윷판(블록 + 블록 엔티티). */
-    public static final Block YUT_BOARD_BLOCK = Registry.register(Registries.BLOCK, id("yut_board"),
-            new YutBoardBlock(AbstractBlock.Settings.create().mapColor(MapColor.OAK_TAN).strength(0.6f)
-                    .sounds(BlockSoundGroup.WOOD).nonOpaque().pistonBehavior(PistonBehavior.DESTROY)));
-    public static final BlockEntityType<YutBoardBlockEntity> YUT_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, id("yut_board"),
-            BlockEntityType.Builder.create(YutBoardBlockEntity::new, YUT_BOARD_BLOCK).build(null));
-    public static final Item YUT_SET = add("yut_set", new YutBoardItem(YUT_BOARD_BLOCK, new Item.Settings()), 10);
+    public static final Block YUT_BOARD_BLOCK = ModReg.block("yut_board", YutBoardBlock::new,
+            BlockBehaviour.Properties.of().mapColor(MapColor.WOOD).strength(0.6f)
+                    .sound(SoundType.WOOD).noOcclusion().pushReaction(PushReaction.POPPED));
+    public static final BlockEntityType<YutBoardBlockEntity> YUT_BE = ModReg.blockEntity("yut_board", YutBoardBlockEntity::new, YUT_BOARD_BLOCK);
+    public static final Item YUT_SET = add("yut_set", p -> new YutBoardItem(YUT_BOARD_BLOCK, p), new Item.Properties(), 10);
 
-    public static final Item GREETING_CARD = add("greeting_card", new SouvenirItem(new Item.Settings().maxCount(16), SouvenirItem.Kind.CARD), 13);
+    public static final Item GREETING_CARD = add("greeting_card", p -> new SouvenirItem(p, SouvenirItem.Kind.CARD), new Item.Properties().stacksTo(16), 13);
 
     private Souvenirs() {}
 
-    private static Identifier id(String path) {
-        return Identifier.of(NewYearCountdown.MOD_ID, path);
-    }
-
-    private static Item add(String path, Item item, int weight) {
-        Registry.register(Registries.ITEM, id(path), item);
+    private static Item add(String path, Function<Item.Properties, Item> factory, Item.Properties props, int weight) {
+        Item item = ModReg.item(path, factory, props);
         ALL.add(new Entry(item, weight));
         totalWeight += weight;
         return item;
     }
 
-    public static Item pick(Random r) {
+    public static Item pick(RandomSource r) {
         int roll = r.nextInt(totalWeight);
         for (Entry e : ALL) {
             roll -= e.weight();
@@ -103,18 +93,18 @@ public final class Souvenirs {
     public static void init() {
         ChampagneSpray.init();
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            if (server.getTicks() % 8 != 0) return;
-            for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
-                if (p.isSpectator() || !p.getEquippedStack(EquipmentSlot.HEAD).isOf(GLASSES)) continue;
-                if (server.getTicks() % 40 == 0) {   // 쓰고 있는 동안 행운 I (표시 아이콘 없이 조용히 유지)
-                    p.addStatusEffect(new StatusEffectInstance(StatusEffects.LUCK, 20 * 12, 0, true, false, true));
+            if (server.getTickCount() % 8 != 0) return;
+            for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+                if (p.isSpectator() || !p.getItemBySlot(EquipmentSlot.HEAD).is(GLASSES)) continue;
+                if (server.getTickCount() % 40 == 0) {   // 쓰고 있는 동안 행운 I (표시 아이콘 없이 조용히 유지)
+                    p.addEffect(new MobEffectInstance(MobEffects.LUCK, 20 * 12, 0, true, false, true));
                 }
-                if (!p.isSneaking()) continue;
-                ServerWorld sw = (ServerWorld) p.getWorld();
-                sw.spawnParticles(ParticleTypes.FIREWORK, p.getX(), p.getEyeY() + 0.35, p.getZ(), 3, 0.35, 0.15, 0.35, 0.05);
-                sw.spawnParticles(ParticleTypes.END_ROD, p.getX(), p.getEyeY() + 0.1, p.getZ(), 1, 0.4, 0.2, 0.4, 0.02);
-                if (server.getTicks() % 40 == 0) {
-                    sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ENTITY_FIREWORK_ROCKET_TWINKLE, SoundCategory.PLAYERS, 0.5f, 1.4f);
+                if (!p.isShiftKeyDown()) continue;
+                ServerLevel sw = (ServerLevel) p.level();
+                sw.sendParticles(ParticleTypes.FIREWORK, p.getX(), p.getEyeY() + 0.35, p.getZ(), 3, 0.35, 0.15, 0.35, 0.05);
+                sw.sendParticles(ParticleTypes.END_ROD, p.getX(), p.getEyeY() + 0.1, p.getZ(), 1, 0.4, 0.2, 0.4, 0.02);
+                if (server.getTickCount() % 40 == 0) {
+                    sw.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.FIREWORK_ROCKET_TWINKLE, SoundSource.PLAYERS, 0.5f, 1.4f);
                 }
             }
         });

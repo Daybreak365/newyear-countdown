@@ -1,18 +1,22 @@
 package dev.newyear.countdown.client;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import dev.newyear.countdown.NewYearCountdown;
 import dev.newyear.countdown.gacha.CapsuleItem;
 import dev.newyear.countdown.gacha.GachaMachineBlock;
 import dev.newyear.countdown.gacha.GachaMachineBlockEntity;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.block.entity.BlockEntityRenderer;
-import net.minecraft.client.render.block.entity.BlockEntityRendererFactory;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
-import net.minecraft.world.World;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
+import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
+import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
 
 /**
  * 가챠 머신 3D 모델 (1x2x1). 붉은 몸체 + 금장 + 유리 돔 안의 캡슐 더미.
@@ -25,15 +29,15 @@ import net.minecraft.world.World;
  *   32~38 받침대에서 두 번 튕기며 안착
  *   36~42 반짝이 + 캡슐이 빛남, 마지막에 팡 하고 사라지며 인벤토리로
  */
-public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntity> {
+public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntity, BeState<GachaMachineBlockEntity>> {
     private static final Identifier T_RED = mc("red_concrete");
     private static final Identifier T_WHITE = mc("white_concrete");
     private static final Identifier T_GOLD = mc("gold_block");
     private static final Identifier T_DARK = mc("polished_blackstone");
     private static final Identifier T_LAMP = mc("shroomlight");
     /** 캡슐 전용 광택 텍스처(틴트로 색을 입힌다)와 이음매 띠 */
-    private static final Identifier T_SHELL = Identifier.of(NewYearCountdown.MOD_ID, "textures/entity/capsule_shell.png");
-    private static final Identifier T_SEAM = Identifier.of(NewYearCountdown.MOD_ID, "textures/entity/capsule_seam.png");
+    private static final Identifier T_SHELL = Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "textures/entity/capsule_shell.png");
+    private static final Identifier T_SEAM = Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "textures/entity/capsule_seam.png");
 
     private static final int WHITE = 0xFFFFFFFF;
     private static final int GLASS = 0x4DCFEAFF;
@@ -43,14 +47,14 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
     /** 돔 안 캡슐 더미 위치 {x, y, z, 층}. */
     private static final float[][] BALLS = buildBalls();
 
-    private final TextRenderer textRenderer;
+    private final Font textRenderer;
 
-    public GachaRenderer(BlockEntityRendererFactory.Context ctx) {
-        this.textRenderer = ctx.getTextRenderer();
+    public GachaRenderer(BlockEntityRendererProvider.Context ctx) {
+        this.textRenderer = ctx.font();
     }
 
     private static Identifier mc(String n) {
-        return Identifier.ofVanilla("textures/block/" + n + ".png");
+        return Identifier.withDefaultNamespace("textures/block/" + n + ".png");
     }
 
     private static float[][] buildBalls() {
@@ -62,19 +66,39 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
             for (int i = 0; i < counts[layer]; i++) {
                 float a = (float) (i * Math.PI * 2 / counts[layer] + layer * 0.9);
                 float r = (layer == 0 && i == 0) ? 0f : rad[layer];
-                l.add(new float[]{MathHelper.sin(a) * r, ys[layer], MathHelper.cos(a) * r, layer});
+                l.add(new float[]{Mth.sin(a) * r, ys[layer], Mth.cos(a) * r, layer});
             }
         }
         return l.toArray(new float[0][]);
     }
 
     @Override
-    public boolean rendersOutsideBoundingBox(GachaMachineBlockEntity be) {
+    public boolean shouldRenderOffScreen() {
         return true;
     }
 
+    @Override
+    public BeState<GachaMachineBlockEntity> createRenderState() {
+        return new BeState<>();
+    }
+
+    @Override
+    public void extractRenderState(GachaMachineBlockEntity be, BeState<GachaMachineBlockEntity> state, float partialTicks, Vec3 camera,
+                                   ModelFeatureRenderer.@Nullable CrumblingOverlay breakProgress) {
+        BlockEntityRenderer.super.extractRenderState(be, state, partialTicks, camera, breakProgress);
+        state.be = be;
+        state.partialTicks = partialTicks;
+    }
+
+    @Override
+    public void submit(BeState<GachaMachineBlockEntity> state, PoseStack m, SubmitNodeCollector collector, CameraRenderState camera) {
+        GeoBuffers buffers = new GeoBuffers();
+        render(state.be, state.partialTicks, m, buffers, camera, state.lightCoords);
+        buffers.flush(collector);
+    }
+
     private static float clamp01(float x) {
-        return MathHelper.clamp(x, 0f, 1f);
+        return Mth.clamp(x, 0f, 1f);
     }
 
     private static float ease(float x) {
@@ -82,25 +106,23 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
         return x * x * (3f - 2f * x);
     }
 
-    @Override
-    public void render(GachaMachineBlockEntity be, float tickDelta, MatrixStack m,
-                       VertexConsumerProvider providers, int light, int overlay) {
-        World world = be.getWorld();
+    private void render(GachaMachineBlockEntity be, float tickDelta, PoseStack m, GeoBuffers providers, CameraRenderState camera, int light) {
+        Level world = be.getLevel();
         if (world == null) return;
-        float age = (world.getTime() - be.animStart) + tickDelta;
+        float age = (world.getGameTime() - be.animStart) + tickDelta;
         boolean anim = age >= 0 && age < T + 2;
-        float time = world.getTime() + tickDelta;
+        float time = world.getGameTime() + tickDelta;
 
         // 소용돌이 세기: 4~8 에 올라갔다가 22~28 에 가라앉는다
         float swirl = anim ? ease((age - 4f) / 4f) * (1f - ease((age - 22f) / 6f)) : 0f;
         // 머신 움찔(0~4) + 손잡이 돌리는 동안의 진동
-        float press = anim && age < 5f ? MathHelper.sin(clamp01(age / 5f) * (float) Math.PI) : 0f;
+        float press = anim && age < 5f ? Mth.sin(clamp01(age / 5f) * (float) Math.PI) : 0f;
 
-        m.push();
+        m.pushPose();
         m.translate(0.5, 0, 0.5);
-        m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-be.getCachedState().get(GachaMachineBlock.FACING).asRotation()));
+        m.rotate(Axis.YP.rotationDegrees(-be.getBlockState().getValue(GachaMachineBlock.FACING).toYRot()));
         if (anim) {
-            m.translate(swirl * 0.0045f * MathHelper.sin(age * 2.7f), -press * 0.018f, swirl * 0.0045f * MathHelper.cos(age * 2.3f));
+            m.translate(swirl * 0.0045f * Mth.sin(age * 2.7f), -press * 0.018f, swirl * 0.0045f * Mth.cos(age * 2.3f));
             m.scale(1f + press * 0.025f, 1f - press * 0.03f, 1f + press * 0.025f);
         }
         BellModel.Painter p = new BellModel.Painter(providers, m, light, 0);
@@ -132,16 +154,16 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
         } else if (age < 26f) {
             turn = -0.06f + 1.56f * ease((age - 4f) / 22f);
         } else {
-            turn = 1.5f + 0.04f * MathHelper.sin(clamp01((age - 26f) / 6f) * (float) Math.PI);
+            turn = 1.5f + 0.04f * Mth.sin(clamp01((age - 26f) / 6f) * (float) Math.PI);
         }
-        m.push();
+        m.pushPose();
         m.translate(0, 0.59f, 0.47f);
-        m.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(-turn * 360f));
+        m.rotate(Axis.ZP.rotationDegrees(-turn * 360f));
         p.use(T_GOLD, WHITE);
         p.box(-0.11f, -0.03f, 0f, 0.11f, 0.03f, 0.04f);
         p.box(-0.03f, -0.11f, 0f, 0.03f, 0.11f, 0.04f);
         p.box(-0.045f, -0.045f, 0f, 0.045f, 0.045f, 0.065f);
-        m.pop();
+        m.popPose();
 
         // 배출구와 받침
         p.use(T_DARK, WHITE);
@@ -155,14 +177,14 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
 
         // 배출구 덮개: 위쪽 경첩을 축으로 바깥으로 열렸다 닫힌다
         float flap = anim ? ease((age - 24f) / 3f) * 56f - ease((age - 33f) / 3f) * 56f : 0f;
-        m.push();
+        m.pushPose();
         m.translate(0, 0.30f, 0.465f);
-        m.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-flap));
+        m.rotate(Axis.XP.rotationDegrees(-flap));
         p.use(T_DARK, 0xFFDDDDDD);
         p.box(-0.105f, -0.14f, -0.012f, 0.105f, 0f, 0.012f);
         p.use(T_GOLD, WHITE);
         p.box(-0.105f, -0.145f, -0.016f, 0.105f, -0.125f, 0.016f);
-        m.pop();
+        m.popPose();
 
         // 마퀴 전구: 평소엔 천천히 깜빡, 돌릴 때는 쫓아가고, 배출될 때는 한꺼번에 번쩍
         p.use(T_LAMP, WHITE);
@@ -190,14 +212,14 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
             int layer = (int) b[3];
             float dir = (layer & 1) == 0 ? 1f : -1f;
             float w = spin * dir * (1f + layer * 0.25f);
-            float sa = MathHelper.sin(w), ca = MathHelper.cos(w);
+            float sa = Mth.sin(w), ca = Mth.cos(w);
             float rx = b[0] * ca - b[2] * sa;
             float rz = b[0] * sa + b[2] * ca;
-            float bounce = swirl * Math.abs(0.05f * MathHelper.sin(age * 0.95f + i * 1.3f));
-            float push = swirl * 0.03f * MathHelper.sin(age * 0.7f + i * 2.1f);    // 반지름 방향으로도 출렁
+            float bounce = swirl * Math.abs(0.05f * Mth.sin(age * 0.95f + i * 1.3f));
+            float push = swirl * 0.03f * Mth.sin(age * 0.7f + i * 2.1f);    // 반지름 방향으로도 출렁
             ball(p, m, rx * (1f + push * 3f), b[1] + bounce, rz * (1f + push * 3f), 0.085f,
                     CapsuleItem.RGB[i % CapsuleItem.RGB.length], i * 37f + swirl * age * 11f * dir,
-                    swirl * 22f * MathHelper.sin(age * 0.45f + i));
+                    swirl * 22f * Mth.sin(age * 0.45f + i));
         }
 
         // ---- 배출되는 캡슐 ----
@@ -207,7 +229,7 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
             float y, z, roll = 0f, pop = 1f;
             if (age < 28f) {                                   // 덮개 밖으로 밀려나온다
                 float t = ease((age - 25f) / 3f);
-                y = 0.285f; z = MathHelper.lerp(t, 0.40f, 0.51f);
+                y = 0.285f; z = Mth.lerp(t, 0.40f, 0.51f);
                 roll = -t * 40f;
             } else if (age < 32f) {                            // 받침대로 구르며 떨어진다
                 float t = (age - 28f) / 4f;
@@ -217,19 +239,19 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
             } else {                                           // 두 번 튕기고 안착
                 float t = (age - 32f) / 6f;
                 float amp = 0.055f * (1f - clamp01(t)) * (1f - clamp01(t));
-                y = restY + amp * Math.abs(MathHelper.sin(clamp01(t) * (float) Math.PI * 2f));
+                y = restY + amp * Math.abs(Mth.sin(clamp01(t) * (float) Math.PI * 2f));
                 z = 0.56f + 0.012f * (1f - clamp01(t));
                 roll = -190f - 40f * (1f - (1f - clamp01(t)) * (1f - clamp01(t)));
             }
             boolean glow = age >= 36f;
             if (age >= T - 2f) pop = 1f - ease((age - (T - 2f)) / 2f) * 0.9f;
             if (glow) p.lightOverride = FULL;
-            m.push();
+            m.pushPose();
             m.translate(0, y, z);
-            m.multiply(RotationAxis.POSITIVE_X.rotationDegrees(roll));
+            m.rotate(Axis.XP.rotationDegrees(roll));
             m.scale(pop, pop, pop);
             ball(p, m, 0f, 0f, 0f, r, CapsuleItem.RGB[be.animColor % CapsuleItem.RGB.length], 20f, 0f);
-            m.pop();
+            m.popPose();
             p.lightOverride = -1;
 
             // 반짝이: 받침대 위로 피어오르는 십자 불꽃
@@ -239,8 +261,8 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
                 for (int k = 0; k < 4; k++) {
                     float t = clamp01((age - 35f) / 7f);
                     float a = k * (float) (Math.PI / 2) + age * 0.18f;
-                    float sx = MathHelper.cos(a) * (0.10f + 0.05f * t);
-                    float sz = 0.56f + MathHelper.sin(a) * 0.06f;
+                    float sx = Mth.cos(a) * (0.10f + 0.05f * t);
+                    float sz = 0.56f + Mth.sin(a) * 0.06f;
                     float sy = restY + 0.05f + t * 0.16f + 0.02f * k;
                     float s = 0.016f * (1f - t * 0.6f);
                     p.box(sx - s * 2.2f, sy - s * 0.4f, sz - s * 0.4f, sx + s * 2.2f, sy + s * 0.4f, sz + s * 0.4f);
@@ -262,16 +284,16 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
         p.setTranslucent(true);
         p.use(T_WHITE, GLASS);
         for (int k = 0; k < 2; k++) {
-            m.push();
-            if (k == 1) m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(45f));
+            m.pushPose();
+            if (k == 1) m.rotate(Axis.YP.rotationDegrees(45f));
             p.box(-0.33f, 0.92f, -0.33f, 0.33f, 1.72f, 0.33f);
-            m.pop();
+            m.popPose();
         }
         p.use(T_WHITE, 0x66FFFFFF);
         p.box(-0.26f, 1.05f, 0.335f, -0.20f, 1.62f, 0.345f); // 유리 반사광
         if (swirl > 0.05f) {
             // 소용돌이칠 때 돔 안이 따뜻한 빛으로 맥동한다
-            int a = (int) (swirl * (28f + 22f * MathHelper.sin(age * 0.9f)));
+            int a = (int) (swirl * (28f + 22f * Mth.sin(age * 0.9f)));
             p.lightOverride = FULL;
             p.use(T_WHITE, (Math.max(a, 0) << 24) | 0xFFD98A);
             p.box(-0.31f, 0.93f, -0.31f, 0.31f, 1.71f, 0.31f);
@@ -280,23 +302,22 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
         p.setTranslucent(false);
 
         // ---- 간판: 2027 (돌리는 동안 반짝이며 통통 튄다) ----
-        m.push();
-        float bob = anim && age > 4f && age < 30f ? 0.012f * Math.abs(MathHelper.sin(age * 0.8f)) : 0f;
+        m.pushPose();
+        float bob = anim && age > 4f && age < 30f ? 0.012f * Math.abs(Mth.sin(age * 0.8f)) : 0f;
         m.translate(0, 1.92f + bob, 0.125f);
         float s = 0.0185f;
         m.scale(s, -s, s);
         String txt = "2027";
-        float w = textRenderer.getWidth(txt);
+        float w = textRenderer.width(txt);
         int gold = anim && ((int) (age / 3f)) % 2 == 0 ? 0xFFFFF2A0 : 0xFFF6C945;
-        textRenderer.draw(txt, -w / 2f, -4f, gold, false, m.peek().getPositionMatrix(), providers,
-                TextRenderer.TextLayerType.NORMAL, 0, FULL);
-        m.pop();
+        providers.text(m, net.minecraft.network.chat.Component.literal(txt), -w / 2f, -4f, gold, false, 0, FULL);
+        m.popPose();
 
-        m.pop();
+        m.popPose();
     }
 
     /** 설치 미리보기 홀로그램(BellPreview): 머신의 큰 덩어리만 단순하게 그린다. */
-    public static void drawGhost(VertexConsumerProvider providers, MatrixStack m, int argb) {
+    public static void drawGhost(GeoBuffers providers, PoseStack m, int argb) {
         BellModel.Painter p = new BellModel.Painter(providers, m, FULL, argb);
         p.use(T_DARK, WHITE);
         p.box(-0.47f, 0f, -0.47f, 0.47f, 0.10f, 0.47f);
@@ -313,14 +334,14 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
     }
 
     /** 정팔각 단면의 기둥(변마다 얇은 직사각 박스 4개가 중심을 지난다). a = 중심에서 면까지 거리. */
-    private static void octagon(BellModel.Painter p, MatrixStack m, float a, float y1, float y2) {
+    private static void octagon(BellModel.Painter p, PoseStack m, float a, float y1, float y2) {
         float b = a * 0.4142f;
         for (int k = 0; k < 4; k++) {
-            m.push();
-            if (k > 0) m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(k * 45f));
+            m.pushPose();
+            if (k > 0) m.rotate(Axis.YP.rotationDegrees(k * 45f));
             float e = k * 0.0005f;   // 윗면/아랫면 z-fighting 방지
             p.box(-a, y1 + e, -b, a, y2 - e, b);
-            m.pop();
+            m.popPose();
         }
     }
 
@@ -328,11 +349,11 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
      * 위는 색, 아래는 흰색인 캡슐. 중심 기준. 전용 광택 텍스처 + 정팔각 3단(구에 가깝게) + 이음매 띠.
      * @param tilt 앞뒤 기울기(도) — 돔 안에서 구를 때의 뒤척임
      */
-    private static void ball(BellModel.Painter p, MatrixStack m, float x, float y, float z, float r, int rgb, float yaw, float tilt) {
-        m.push();
+    private static void ball(BellModel.Painter p, PoseStack m, float x, float y, float z, float r, int rgb, float yaw, float tilt) {
+        m.pushPose();
         m.translate(x, y, z);
-        m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(yaw));
-        if (tilt != 0f) m.multiply(RotationAxis.POSITIVE_X.rotationDegrees(tilt));
+        m.rotate(Axis.YP.rotationDegrees(yaw));
+        if (tilt != 0f) m.rotate(Axis.XP.rotationDegrees(tilt));
         p.fullUv = true;
         int top = 0xFF000000 | rgb;
         // 위 반구
@@ -349,6 +370,6 @@ public class GachaRenderer implements BlockEntityRenderer<GachaMachineBlockEntit
         p.use(T_SEAM, 0xFFFFFFFF);
         octagon(p, m, r * 1.0f, -0.035f * r, 0.035f * r);
         p.fullUv = false;
-        m.pop();
+        m.popPose();
     }
 }

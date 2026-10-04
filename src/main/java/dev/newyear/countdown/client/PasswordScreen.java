@@ -1,72 +1,74 @@
 package dev.newyear.countdown.client;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.util.FormattedCharSequence;
 
 /** 숨김 기능 잠금 해제용 비밀번호 입력 화면. */
 public class PasswordScreen extends Screen {
     private final Screen parent;
-    private TextFieldWidget field;
-    private Text error = Text.empty();
+    private EditBox field;
+    private Component error = Component.empty();
 
     public PasswordScreen(Screen parent) {
-        super(Text.translatable("screen.newyearcountdown.password.title"));
+        super(Component.translatable("screen.newyearcountdown.password.title"));
         this.parent = parent;
     }
 
     @Override
     protected void init() {
         int cx = width / 2;
-        field = new TextFieldWidget(textRenderer, cx - 100, height / 2 - 10, 200, 20, Text.empty());
+        field = new EditBox(font, cx - 100, height / 2 - 10, 200, 20, Component.empty());
         field.setMaxLength(32);
         // 입력한 글자를 별표로 가린다
-        field.setRenderTextProvider((text, firstIndex) -> OrderedText.styledForwardsVisitedString("*".repeat(text.length()), Style.EMPTY));
-        addDrawableChild(field);
+        field.addFormatter((text, firstIndex) -> FormattedCharSequence.forward("*".repeat(text.length()), Style.EMPTY));
+        addRenderableWidget(field);
         setInitialFocus(field);
 
         int bw = 97;
-        addDrawableChild(ButtonWidget.builder(Text.translatable("screen.newyearcountdown.password.ok"), b -> submit())
-                .dimensions(cx - 100, height / 2 + 18, bw, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.translatable("screen.newyearcountdown.password.cancel"), b -> close())
-                .dimensions(cx + 3, height / 2 + 18, bw, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("screen.newyearcountdown.password.ok"), b -> submit())
+                .bounds(cx - 100, height / 2 + 18, bw, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("screen.newyearcountdown.password.cancel"), b -> onClose())
+                .bounds(cx + 3, height / 2 + 18, bw, 20).build());
     }
 
     private void submit() {
-        if (DebugAccess.tryUnlock(field.getText())) {
-            MinecraftClient.getInstance().setScreen(parent); // 설정 화면이 다시 열리며 숨김 섹션이 나타난다
+        if (DebugAccess.tryUnlock(field.getValue())) {
+            Minecraft.getInstance().gui.setScreen(parent); // 설정 화면이 다시 열리며 숨김 섹션이 나타난다
         } else {
-            error = Text.translatable("screen.newyearcountdown.password.wrong").styled(s -> s.withColor(0xFF6B6B));
-            field.setText("");
+            error = Component.translatable("screen.newyearcountdown.password.wrong").withStyle(s -> s.withColor(0xFF6B6B));
+            field.setValue("");
         }
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+        if (keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER) {
             submit();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        super.render(ctx, mouseX, mouseY, delta);
-        ctx.drawCenteredTextWithShadow(textRenderer, title, width / 2, height / 2 - 34, 0xFFFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
+        ctx.centeredText(font, title, width / 2, height / 2 - 34, 0xFFFFFFFF);
         if (!error.getString().isEmpty()) {
-            ctx.drawCenteredTextWithShadow(textRenderer, error, width / 2, height / 2 + 46, 0xFFFFFFFF);
+            ctx.centeredText(font, error, width / 2, height / 2 + 46, 0xFFFFFFFF);
         }
     }
 
     @Override
-    public void close() {
-        MinecraftClient.getInstance().setScreen(parent);
+    public void onClose() {
+        Minecraft.getInstance().gui.setScreen(parent);
     }
 }

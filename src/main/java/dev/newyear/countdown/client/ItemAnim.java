@@ -2,14 +2,17 @@ package dev.newyear.countdown.client;
 
 import dev.newyear.countdown.NewYearCountdown;
 import dev.newyear.countdown.gacha.CapsuleItem;
-import dev.newyear.countdown.gacha.GachaBlocks;
 import dev.newyear.countdown.gacha.SouvenirItem;
-import dev.newyear.countdown.gacha.Souvenirs;
-import net.minecraft.client.item.ModelPredicateProviderRegistry;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.Identifier;
+import com.mojang.serialization.MapCodec;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.item.properties.numeric.RangeSelectItemModelProperties;
+import net.minecraft.client.renderer.item.properties.numeric.RangeSelectItemModelProperty;
+import net.minecraft.world.entity.ItemOwner;
+import org.jspecify.annotations.Nullable;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * 아이템 모델 상태 전환. 아이템 모델 JSON 의 overrides 가 아래 predicate 값을 보고 "흔들림 / 열림 / 불꽃" 모델로 바꾼다.
@@ -21,31 +24,54 @@ import net.minecraft.util.Identifier;
 public final class ItemAnim {
     private ItemAnim() {}
 
-    public static void register() {
-        Identifier capsuleId = Identifier.of(NewYearCountdown.MOD_ID, "capsule");
-        ModelPredicateProviderRegistry.register(GachaBlocks.CAPSULE, capsuleId,
-                (stack, world, entity, seed) -> capsule(stack, entity));
+    /** 캡슐 상태 (items/capsule.json 의 range_dispatch). */
+    public record CapsuleProperty() implements RangeSelectItemModelProperty {
+        public static final MapCodec<CapsuleProperty> MAP_CODEC = MapCodec.unit(new CapsuleProperty());
 
-        Identifier fxId = Identifier.of(NewYearCountdown.MOD_ID, "fx");
-        for (Souvenirs.Entry e : Souvenirs.ALL) {
-            if (e.item() instanceof SouvenirItem s && s.kind() != SouvenirItem.Kind.PLAIN) {
-                ModelPredicateProviderRegistry.register(s, fxId, (stack, world, entity, seed) -> fx(s, stack, entity) / 3f);
-            }
+        @Override
+        public float get(ItemStack stack, @Nullable ClientLevel level, @Nullable ItemOwner owner, int seed) {
+            return capsule(stack, owner == null ? null : owner.asLivingEntity());
+        }
+
+        @Override
+        public MapCodec<CapsuleProperty> type() {
+            return MAP_CODEC;
         }
     }
 
+    /** 기념품 프레임 (items/<기념품>.json 의 range_dispatch). */
+    public record FxProperty() implements RangeSelectItemModelProperty {
+        public static final MapCodec<FxProperty> MAP_CODEC = MapCodec.unit(new FxProperty());
+
+        @Override
+        public float get(ItemStack stack, @Nullable ClientLevel level, @Nullable ItemOwner owner, int seed) {
+            if (!(stack.getItem() instanceof SouvenirItem s)) return 0f;
+            return fx(s, stack, owner == null ? null : owner.asLivingEntity()) / 3f;
+        }
+
+        @Override
+        public MapCodec<FxProperty> type() {
+            return MAP_CODEC;
+        }
+    }
+
+    public static void register() {
+        RangeSelectItemModelProperties.ID_MAPPER.put(Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "capsule"), CapsuleProperty.MAP_CODEC);
+        RangeSelectItemModelProperties.ID_MAPPER.put(Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "fx"), FxProperty.MAP_CODEC);
+    }
+
     private static boolean using(ItemStack stack, LivingEntity entity) {
-        return entity != null && entity.isUsingItem() && entity.getActiveItem() == stack;
+        return entity != null && entity.isUsingItem() && entity.getUseItem() == stack;
     }
 
     /** 사용(꾹 누르기) 경과 틱. */
     private static int usedTicks(ItemStack stack, LivingEntity entity) {
-        return stack.getMaxUseTime(entity) - entity.getItemUseTimeLeft();
+        return stack.getUseDuration(entity) - entity.getUseItemRemainingTicks();
     }
 
     /** 0(전부 끝남) ~ 1(방금 시작) */
     private static float cooldown(SouvenirItem item, LivingEntity entity) {
-        if (entity instanceof PlayerEntity p) return p.getItemCooldownManager().getCooldownProgress(item, 0f);
+        if (entity instanceof Player p) return p.getCooldowns().getCooldownPercent(item.getDefaultInstance(), 0f);
         return 0f;
     }
 
@@ -67,7 +93,7 @@ public final class ItemAnim {
     }
 
     private static int fx(SouvenirItem item, ItemStack stack, LivingEntity entity) {
-        int age = entity != null ? entity.age : 0;
+        int age = entity != null ? entity.tickCount : 0;
         int wiggle = 1 + ((age / 2) & 1);       // 2틱마다 번갈아 1, 2
         boolean using = using(stack, entity);
         float el = elapsed(item, entity);

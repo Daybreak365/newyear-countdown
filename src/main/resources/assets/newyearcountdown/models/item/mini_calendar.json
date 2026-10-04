@@ -1,14 +1,1 @@
-{
- "parent": "minecraft:item/generated",
- "textures": {
-  "layer0": "newyearcountdown:item/mini_calendar"
- },
- "overrides": [
-  {
-   "predicate": {
-    "newyearcountdown:fx": 0.9
-   },
-   "model": "newyearcountdown:item/mini_calendar_flip"
-  }
- ]
-}
+{"parent":"minecraft:item/generated","textures":{"layer0":"newyearcountdown:item/mini_calendar"}}

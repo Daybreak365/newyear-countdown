@@ -1,14 +1,1 @@
-{
- "parent": "minecraft:item/generated",
- "textures": {
-  "layer0": "newyearcountdown:item/greeting_card"
- },
- "overrides": [
-  {
-   "predicate": {
-    "newyearcountdown:fx": 0.9
-   },
-   "model": "newyearcountdown:item/greeting_card_open"
-  }
- ]
-}
+{"parent":"minecraft:item/generated","textures":{"layer0":"newyearcountdown:item/greeting_card"}}

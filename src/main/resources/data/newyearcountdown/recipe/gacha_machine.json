@@ -1,27 +1,18 @@
 {
   "type": "minecraft:crafting_shaped",
   "category": "misc",
+  "key": {
+    "G": "minecraft:glass",
+    "R": "minecraft:red_dye",
+    "H": "minecraft:hopper",
+    "I": "minecraft:iron_ingot"
+  },
   "pattern": [
     "GGG",
     "RHR",
     "III"
   ],
-  "key": {
-    "G": {
-      "item": "minecraft:glass"
-    },
-    "R": {
-      "item": "minecraft:red_dye"
-    },
-    "H": {
-      "item": "minecraft:hopper"
-    },
-    "I": {
-      "item": "minecraft:iron_ingot"
-    }
-  },
   "result": {
-    "id": "newyearcountdown:gacha_machine",
-    "count": 1
+    "id": "newyearcountdown:gacha_machine"
   }
 }

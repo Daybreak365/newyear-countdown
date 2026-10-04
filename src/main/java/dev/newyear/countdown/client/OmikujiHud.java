@@ -1,14 +1,14 @@
 package dev.newyear.countdown.client;
 
+import com.mojang.math.Axis;
 import dev.newyear.countdown.ModSounds;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.client.sound.PositionedSoundInstance;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.util.Mth;
 
 /**
  * 받은 운세 종이가 화면 아래 핫바(인벤토리) 쪽으로 빨려 들어가는 연출.
@@ -46,14 +46,14 @@ public final class OmikujiHud {
     }
 
     private static void play(SoundEvent sound, float pitch, float volume) {
-        MinecraftClient.getInstance().getSoundManager().play(PositionedSoundInstance.master(sound, pitch, volume));
+        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(sound, pitch, volume));
     }
 
-    public static void render(DrawContext ctx, RenderTickCounter tick) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || mc.options.hudHidden) return;
+    public static void render(GuiGraphicsExtractor ctx, DeltaTracker tick) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
         if (!flying && landStart < 0) return;
-        int sw = ctx.getScaledWindowWidth(), sh = ctx.getScaledWindowHeight();
+        int sw = ctx.guiWidth(), sh = ctx.guiHeight();
         float tx = sw / 2f, ty = sh - 12f;    // 핫바 한가운데
 
         if (flying) {
@@ -62,7 +62,7 @@ public final class OmikujiHud {
                 flying = false;
                 landStart = System.nanoTime();
                 play(ModSounds.OMIKUJI_SUZU, 1.7f, 0.5f);
-                mc.player.sendMessage(Text.translatable("omikuji.newyearcountdown.ui.stored"), true);
+                mc.player.sendOverlayMessage(Component.translatable("omikuji.newyearcountdown.ui.stored"));
             } else {
                 drawFlight(ctx, mc, t, tx, ty);
             }
@@ -86,23 +86,23 @@ public final class OmikujiHud {
         return new float[]{x, y, e};
     }
 
-    private static void drawFlight(DrawContext ctx, MinecraftClient mc, float t, float tx, float ty) {
+    private static void drawFlight(GuiGraphicsExtractor ctx, Minecraft mc, float t, float tx, float ty) {
         float[] p = pos(t, tx, ty);
         float e = p[2];
         // 끝으로 갈수록 작아지고 가로로 접히듯 납작해진다
-        float scale = MathHelper.lerp(e, fromScale, 0.04f);
+        float scale = Mth.lerp(e, fromScale, 0.04f);
         float squash = 1f - 0.6f * e;
         float alpha = 1f - Math.max(0f, (e - 0.85f) / 0.15f);
-        ctx.getMatrices().push();
-        ctx.getMatrices().translate(p[0], p[1], 300);
-        ctx.getMatrices().multiply(RotationAxis.POSITIVE_Z.rotationDegrees(e * 12f));
-        ctx.getMatrices().scale(scale * squash, scale, 1f);
-        OmikujiPaper.draw(ctx, mc.textRenderer, flightEntry, alpha, flightExtra);
-        ctx.getMatrices().pop();
+        ctx.pose().pushMatrix();
+        ctx.pose().translate(p[0], p[1]);
+        ctx.pose().rotate((float) Math.toRadians(e * 12f));
+        ctx.pose().scale(scale * squash, scale);
+        OmikujiPaper.draw(ctx, mc.font, flightEntry, alpha, flightExtra);
+        ctx.pose().popMatrix();
     }
 
     /** 핫바에 닿는 순간 퍼지는 작은 금빛 고리. */
-    private static void drawLanding(DrawContext ctx, float t, float tx, float ty) {
+    private static void drawLanding(GuiGraphicsExtractor ctx, float t, float tx, float ty) {
         float r = 4f + 16f * t;
         int al = (int) ((1f - t) * 200);
         int col = (al << 24) | 0xF6D775;

@@ -1,33 +1,33 @@
 package dev.newyear.countdown.client;
 
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.VertexFormats;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Util;
-
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.CompareOp;
+import com.mojang.renderpearl.api.pipeline.DepthStencilState;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import dev.newyear.countdown.ModReg;
 import java.util.function.Function;
+import net.minecraft.util.Util;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.rendertype.RenderSetup;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 
 /** 뒷배경을 가리지 않는 가산(additive) 발광 레이어: 깊이를 기록하지 않아 빛이 배경 위에 '더해지기만' 한다. */
-public final class GlowLayer extends RenderLayer {
-    private GlowLayer(String n, int sz) {
-        super(n, VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL, net.minecraft.client.render.VertexFormat.DrawMode.QUADS, sz, false, true, () -> {}, () -> {});
-        throw new IllegalStateException();
-    }
+public final class GlowLayer {
+    private GlowLayer() {}
 
-    private static final Function<Identifier, RenderLayer> CACHE = Util.memoize(id -> RenderLayer.of(
+    private static final RenderPipeline PIPELINE = RenderPipelines.register(
+            RenderPipeline.builder(RenderPipelines.ENTITY_EMISSIVE_SNIPPET, RenderPipelines.EYES_SNIPPET)
+                    .withLocation(ModReg.id("pipeline/glow"))
+                    .withColorTargetState(new ColorTargetState(BlendFunction.LIGHTNING))   // SRC_ALPHA + ONE (가산)
+                    .withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false))   // 깊이 기록 없음
+                    .withCull(false)
+                    .build());
+
+    private static final Function<Identifier, RenderType> CACHE = Util.memoize(id -> RenderType.create(
             "newyearcountdown_glow",
-            VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL,
-            net.minecraft.client.render.VertexFormat.DrawMode.QUADS,
-            256, false, true,
-            RenderLayer.MultiPhaseParameters.builder()
-                    .program(ENTITY_TRANSLUCENT_PROGRAM)
-                    .texture(new net.minecraft.client.render.RenderPhase.Texture(id, false, false))
-                    .transparency(LIGHTNING_TRANSPARENCY)   // SRC_ALPHA + ONE (가산)
-                    .writeMaskState(COLOR_MASK)             // 깊이 기록 없음
-                    .cull(DISABLE_CULLING)
-                    .lightmap(DISABLE_LIGHTMAP)
-                    .overlay(DISABLE_OVERLAY_COLOR)
-                    .build(false)));
+            RenderSetup.builder(PIPELINE).withTexture("Sampler0", id).sortOnUpload().createRenderSetup()));
 
-    public static RenderLayer get(Identifier tex) { return CACHE.apply(tex); }
+    public static RenderType get(Identifier tex) { return CACHE.apply(tex); }
 }

@@ -1,25 +1,27 @@
 package dev.newyear.countdown.bell;
 
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import dev.newyear.countdown.ModSounds;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.network.listener.ClientPlayPacketListener;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.s2c.play.BlockEntityUpdateS2CPacket;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import java.util.UUID;
 
 /**
@@ -69,14 +71,14 @@ public class BosingakBellBlockEntity extends BlockEntity {
 
     /** 블록이 향한 방향(정면)에 해당하는 yaw (도). 정면=로컬 +Z. */
     public float getYaw() {
-        return getCachedState().get(BosingakBellBlock.FACING).asRotation();
+        return getBlockState().getValue(BosingakBellBlock.FACING).toYRot();
     }
 
     /** 구조물 좌표(S) → 월드 좌표. */
-    public Vec3d structToWorld(double sx, double sy, double sz) {
+    public Vec3 structToWorld(double sx, double sy, double sz) {
         double th = Math.toRadians(getYaw());
         double c = Math.cos(th), s = Math.sin(th);
-        return new Vec3d(pos.getX() + 0.5 + sx * c - sz * s, pos.getY() + sy, pos.getZ() + 0.5 + sx * s + sz * c);
+        return new Vec3(worldPosition.getX() + 0.5 + sx * c - sz * s, worldPosition.getY() + sy, worldPosition.getZ() + 0.5 + sx * s + sz * c);
     }
 
     /** 타종자가 서는 방향(yaw): 당목 축을 따라 종 쪽(+X)을 바라본다. */
@@ -89,76 +91,76 @@ public class BosingakBellBlockEntity extends BlockEntity {
         return logCenterX(theta) - LOG_HALF_LEN - GRIP_GAP - HAND_REACH;
     }
 
-    public Vec3d standPos(float theta) {
+    public Vec3 standPos(float theta) {
         return structToWorld(standX(theta), 0, 0);
     }
 
     /** 당목이 θ 만큼 흔들렸을 때의 중심 X (구조물 좌표). */
     public static float logCenterX(float theta) {
-        return X_LOG + ROPE_L * MathHelper.sin(theta);
+        return X_LOG + ROPE_L * Mth.sin(theta);
     }
 
     // ================= 저장 / 동기화 =================
 
     @Override
-    protected void writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
-        super.writeNbt(nbt, lookup);
+    protected void saveAdditional(ValueOutput out) {
+        super.saveAdditional(out);
     }
 
     @Override
-    protected void readNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
-        super.readNbt(nbt, lookup);
+    protected void loadAdditional(ValueInput in) {
+        super.loadAdditional(in);
         UUID old = user;
-        user = nbt.containsUuid("User") ? nbt.getUuid("User") : null;
-        if (old != null && !old.equals(user)) BellUsers.remove(old, pos);
-        if (user != null) BellUsers.set(user, pos);
+        user = in.getIntArray("User").filter(a -> a.length == 4).map(UUIDUtil::uuidFromIntArray).orElse(null);
+        if (old != null && !old.equals(user)) BellUsers.remove(old, worldPosition);
+        if (user != null) BellUsers.set(user, worldPosition);
     }
 
     /** 클라이언트에 현재 사용자 정보를 보낸다 (팔 자세 표시용). 디스크에는 저장하지 않는다. */
     @Override
-    public NbtCompound toInitialChunkDataNbt(RegistryWrapper.WrapperLookup lookup) {
-        NbtCompound nbt = new NbtCompound();
-        if (user != null) nbt.putUuid("User", user);
+    public CompoundTag getUpdateTag(HolderLookup.Provider lookup) {
+        CompoundTag nbt = new CompoundTag();
+        if (user != null) nbt.putIntArray("User", UUIDUtil.uuidToIntArray(user));
         return nbt;
     }
 
     @Override
-    public Packet<ClientPlayPacketListener> toUpdatePacket() {
-        return BlockEntityUpdateS2CPacket.create(this);
+    public Packet<ClientGamePacketListener> getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
     }
 
     private void syncUser() {
-        if (world != null) world.updateListeners(pos, getCachedState(), getCachedState(), Block.NOTIFY_LISTENERS);
+        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
     }
 
     @Override
-    public void markRemoved() {
-        super.markRemoved();
+    public void setRemoved() {
+        super.setRemoved();
         if (user != null) {
-            BellUsers.remove(user, pos);
-            if (world instanceof ServerWorld) release(true);
+            BellUsers.remove(user, worldPosition);
+            if (level instanceof ServerLevel) release(true);
         }
     }
 
     // ================= 틱 =================
 
-    public static void tick(World world, BlockPos pos, BlockState state, BosingakBellBlockEntity be) {
+    public static void tick(Level world, BlockPos pos, BlockState state, BosingakBellBlockEntity be) {
         be.ticks++;
-        if (world.isClient) {
+        if (world.isClientSide()) {
             if (!be.localControlled) {
                 be.prevStrikerAngle = be.strikerAngle;
                 be.strikerAngle += (be.strikerTarget - be.strikerAngle) * 0.6f;
             }
             return;
         }
-        be.serverTick((ServerWorld) world);
+        be.serverTick((ServerLevel) world);
     }
 
-    private void serverTick(ServerWorld world) {
+    private void serverTick(ServerLevel world) {
         if (user != null) {
-            ServerPlayerEntity p = world.getServer().getPlayerManager().getPlayer(user);
-            Vec3d stand = standPos(0f);
-            if (p == null || p.isRemoved() || !p.isAlive() || p.squaredDistanceTo(stand) > 400 || ++idleTicks > IDLE_TIMEOUT_TICKS) {
+            ServerPlayer p = world.getServer().getPlayerList().getPlayer(user);
+            Vec3 stand = standPos(0f);
+            if (p == null || p.isRemoved() || !p.isAlive() || p.distanceToSqr(stand) > 400 || ++idleTicks > IDLE_TIMEOUT_TICKS) {
                 release(true);
             }
         }
@@ -171,15 +173,15 @@ public class BosingakBellBlockEntity extends BlockEntity {
     // ================= 상호작용 =================
 
     /** 당목을 우클릭했을 때 (서버). */
-    public void onUsedBy(ServerPlayerEntity sp) {
+    public void onUsedBy(ServerPlayer sp) {
         if (autoRemaining > 0 || autoTick > 0) {
-            sp.sendMessage(Text.translatable("bell.newyearcountdown.auto"), true);
+            sp.sendOverlayMessage(Component.translatable("bell.newyearcountdown.auto"));
             return;
         }
-        if (user != null && !user.equals(sp.getUuid())) {
-            ServerPlayerEntity current = sp.getServer().getPlayerManager().getPlayer(user);
+        if (user != null && !user.equals(sp.getUUID())) {
+            ServerPlayer current = sp.level().getServer().getPlayerList().getPlayer(user);
             if (current != null) {
-                sp.sendMessage(Text.translatable("bell.newyearcountdown.busy"), true);
+                sp.sendOverlayMessage(Component.translatable("bell.newyearcountdown.busy"));
                 return;
             }
             user = null; // 접속이 끊긴 사용자는 자리를 비운 것으로 처리
@@ -187,27 +189,27 @@ public class BosingakBellBlockEntity extends BlockEntity {
         engage(sp);
     }
 
-    private void engage(ServerPlayerEntity sp) {
-        user = sp.getUuid();
+    private void engage(ServerPlayer sp) {
+        user = sp.getUUID();
         idleTicks = 0;
         strikerAngle = 0;
         syncUser();
         // 당목 뒤끝으로 옮기고 종 쪽을 바라보게 한다
-        Vec3d stand = standPos(0f);
-        sp.networkHandler.requestTeleport(stand.x, stand.y, stand.z, standYaw(), 0f);
-        ServerPlayNetworking.send(sp, new BellPackets.EngageS2C(pos));
+        Vec3 stand = standPos(0f);
+        sp.connection.teleport(stand.x, stand.y, stand.z, standYaw(), 0f);
+        ServerPlayNetworking.send(sp, new BellPackets.EngageS2C(worldPosition));
     }
 
-    public boolean isUser(ServerPlayerEntity p) {
-        return user != null && user.equals(p.getUuid());
+    public boolean isUser(ServerPlayer p) {
+        return user != null && user.equals(p.getUUID());
     }
 
     /** 사용 권한 해제. force=true 면 사용자에게 강제 종료를 알린다. */
     public void release(boolean force) {
-        if (user == null || !(world instanceof ServerWorld sw)) return;
-        ServerPlayerEntity p = sw.getServer().getPlayerManager().getPlayer(user);
-        if (force && p != null) ServerPlayNetworking.send(p, new BellPackets.ForceExitS2C(pos));
-        BellUsers.remove(user, pos);
+        if (user == null || !(level instanceof ServerLevel sw)) return;
+        ServerPlayer p = sw.getServer().getPlayerList().getPlayer(user);
+        if (force && p != null) ServerPlayNetworking.send(p, new BellPackets.ForceExitS2C(worldPosition));
+        BellUsers.remove(user, worldPosition);
         user = null;
         syncUser();
         setAngleAndBroadcast(0f, null);
@@ -217,24 +219,24 @@ public class BosingakBellBlockEntity extends BlockEntity {
 
     public void onSwing(float angle) {
         idleTicks = 0;
-        float a = MathHelper.clamp(angle, THETA_MIN - 0.05f, THETA_C + 0.05f);
-        ServerPlayerEntity except = null;
-        if (user != null && world instanceof ServerWorld sw) except = sw.getServer().getPlayerManager().getPlayer(user);
+        float a = Mth.clamp(angle, THETA_MIN - 0.05f, THETA_C + 0.05f);
+        ServerPlayer except = null;
+        if (user != null && level instanceof ServerLevel sw) except = sw.getServer().getPlayerList().getPlayer(user);
         setAngleAndBroadcast(a, except);
     }
 
     public void onStrikeRequest(float strength) {
         if (ticks - lastStrikeTick < 6) return; // 연타 방지
         lastStrikeTick = ticks;
-        ring(MathHelper.clamp(strength, 0.05f, 1f));
+        ring(Mth.clamp(strength, 0.05f, 1f));
     }
 
-    private void setAngleAndBroadcast(float angle, ServerPlayerEntity except) {
+    private void setAngleAndBroadcast(float angle, ServerPlayer except) {
         strikerAngle = angle;
-        if (!(world instanceof ServerWorld sw)) return;
-        for (ServerPlayerEntity p : PlayerLookup.tracking(sw, pos)) {
-            if (except != null && p.getUuid().equals(except.getUuid())) continue;
-            ServerPlayNetworking.send(p, new BellPackets.AngleS2C(pos, angle));
+        if (!(level instanceof ServerLevel sw)) return;
+        for (ServerPlayer p : PlayerLookup.tracking(sw, worldPosition)) {
+            if (except != null && p.getUUID().equals(except.getUUID())) continue;
+            ServerPlayNetworking.send(p, new BellPackets.AngleS2C(worldPosition, angle));
         }
     }
 
@@ -242,20 +244,20 @@ public class BosingakBellBlockEntity extends BlockEntity {
 
     /** 종을 울린다: 소리 + 근처 플레이어에게 흔들림 연출. */
     public void ring(float strength) {
-        if (!(world instanceof ServerWorld sw)) return;
-        Vec3d at = structToWorld(0, 1.8, 0);
+        if (!(level instanceof ServerLevel sw)) return;
+        Vec3 at = structToWorld(0, 1.8, 0);
         float volume = 0.35f + 0.65f * strength;
-        float pitch = 0.98f + sw.random.nextFloat() * 0.04f;
-        sw.playSound(null, at.x, at.y, at.z, ModSounds.BELL_STRIKE, SoundCategory.BLOCKS, volume, pitch);
-        for (ServerPlayerEntity p : PlayerLookup.tracking(sw, pos)) {
-            ServerPlayNetworking.send(p, new BellPackets.RingS2C(pos, strength));
+        float pitch = 0.98f + sw.getRandom().nextFloat() * 0.04f;
+        sw.playSound(null, at.x, at.y, at.z, ModSounds.BELL_STRIKE, SoundSource.BLOCKS, volume, pitch);
+        for (ServerPlayer p : PlayerLookup.tracking(sw, worldPosition)) {
+            ServerPlayNetworking.send(p, new BellPackets.RingS2C(worldPosition, strength));
         }
     }
 
     /** 클라이언트: 울림 수신 시 호출 (흔들림 시작). */
     public void onRingClient(float strength) {
         swayAmp = 0.02f + 0.07f * strength;
-        swayStart = world == null ? 0 : world.getTime();
+        swayStart = level == null ? 0 : level.getGameTime();
     }
 
     // ================= 자동 타종 (새해 33타) =================

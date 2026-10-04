@@ -1,36 +1,36 @@
 package dev.newyear.countdown.omikuji;
 
-import net.minecraft.block.Block;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 
 public class OmikujiItem extends BlockItem {
-    public OmikujiItem(Block block, Settings settings) {
+    public OmikujiItem(Block block, Properties settings) {
         super(block, settings);
     }
 
     @Override
-    public ActionResult place(ItemPlacementContext context) {
-        World world = context.getWorld();
-        BlockPos master = context.getBlockPos();
-        Direction facing = context.getHorizontalPlayerFacing().getOpposite();
+    public InteractionResult place(BlockPlaceContext context) {
+        Level world = context.getLevel();
+        BlockPos master = context.getClickedPos();
+        Direction facing = context.getHorizontalDirection().getOpposite();
         if (!OmikujiLayout.canPlace(world, master, facing)) {
-            if (!world.isClient && context.getPlayer() != null) {
-                context.getPlayer().sendMessage(Text.translatable("bell.newyearcountdown.no_space"), true);
+            if (!world.isClientSide() && context.getPlayer() != null) {
+                context.getPlayer().sendOverlayMessage(Component.translatable("bell.newyearcountdown.no_space"));
             }
-            return ActionResult.FAIL;
+            return InteractionResult.FAIL;
         }
-        if (world.isClient) return ActionResult.SUCCESS;
+        if (world.isClientSide()) return InteractionResult.SUCCESS;
         OmikujiLayout.place(world, master, facing);
-        world.playSound(null, master, SoundEvents.BLOCK_WOOD_PLACE, SoundCategory.BLOCKS, 1.0f, 0.9f);
-        context.getStack().decrementUnlessCreative(1, context.getPlayer());
-        return ActionResult.SUCCESS;
+        world.playSound(null, master, SoundEvents.WOOD_PLACE, SoundSource.BLOCKS, 1.0f, 0.9f);
+        context.getItemInHand().consume(1, context.getPlayer());
+        return InteractionResult.SUCCESS;
     }
 }

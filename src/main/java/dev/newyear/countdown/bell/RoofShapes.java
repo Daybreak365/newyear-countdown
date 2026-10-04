@@ -1,11 +1,10 @@
 package dev.newyear.countdown.bell;
 
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.shape.VoxelShape;
-import net.minecraft.util.shape.VoxelShapes;
-
 import java.util.HashMap;
 import java.util.Map;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * 지붕 칸의 충돌 모양: 렌더링되는 계단식 지붕(0.28 블록 단차)과 같은 모양이라 걸어서 올라갈 수 있다.
@@ -29,12 +28,12 @@ public final class RoofShapes {
     private RoofShapes() {}
 
     public static synchronized VoxelShape get(int lx, int ly, int lz, Direction facing) {
-        long key = (((long) (lx + 8) * 16 + ly) * 16 + (lz + 8)) * 8 + facing.getHorizontal();
+        long key = (((long) (lx + 8) * 16 + ly) * 16 + (lz + 8)) * 8 + facing.get2DDataValue();
         return CACHE.computeIfAbsent(key, k -> build(lx, ly, lz, facing));
     }
 
     private static VoxelShape build(int lx, int ly, int lz, Direction facing) {
-        VoxelShape out = VoxelShapes.empty();
+        VoxelShape out = Shapes.empty();
         for (double[] b : BOXES) {
             double x0 = Math.max(CX - b[0], lx - 0.5), x1 = Math.min(CX + b[0], lx + 0.5);
             double z0 = Math.max(-b[1], lz - 0.5), z1 = Math.min(b[1], lz + 0.5);
@@ -46,7 +45,7 @@ public final class RoofShapes {
             double ay = y0 - ly, by = y1 - ly;
             // 방향에 맞춰 회전 (BellLayout.cell 과 같은 규칙, 칸 중심 기준)
             double[] r = rotate(ax, bx, az, bz, facing);
-            out = VoxelShapes.union(out, VoxelShapes.cuboid(r[0], ay, r[2], r[1], by, r[3]));
+            out = Shapes.or(out, Shapes.box(r[0], ay, r[2], r[1], by, r[3]));
         }
         return out;
     }

@@ -1,8 +1,8 @@
 package dev.newyear.countdown.client;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.sound.PositionedSoundInstance;
 import dev.newyear.countdown.ModSounds;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 
 /** 마지막 30초 동안 HUD의 초 숫자가 바뀌는 순간마다 째깍/째깍 소리를 낸다. */
 public final class CountdownTicker {
@@ -11,7 +11,7 @@ public final class CountdownTicker {
 
     private CountdownTicker() {}
 
-    public static void tick(MinecraftClient client) {
+    public static void tick(Minecraft client) {
         if (client.player == null) {
             lastSec = -1;
             return;
@@ -28,9 +28,9 @@ public final class CountdownTicker {
 
         // 짝수 초 = 째(tick), 홀수 초 = 깍(tock). 실제 시계 소리를 합성한 음원.
         boolean tick = remSec % 2 == 0;
-        float pitch = 0.98f + client.world.random.nextFloat() * 0.04f;   // 미세한 변화로 기계적인 반복감 줄임
+        float pitch = 0.98f + client.level.getRandom().nextFloat() * 0.04f;   // 미세한 변화로 기계적인 반복감 줄임
         float volume = remSec <= 10 ? 0.95f : 0.6f;                      // 마지막 10초는 더 크게
-        client.getSoundManager().play(PositionedSoundInstance.master(
+        client.getSoundManager().play(SimpleSoundInstance.forUI(
                 tick ? ModSounds.CLOCK_TICK : ModSounds.CLOCK_TOCK, pitch, volume));
     }
 }

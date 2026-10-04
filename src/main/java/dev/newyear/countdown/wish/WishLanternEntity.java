@@ -1,20 +1,23 @@
 package dev.newyear.countdown.wish;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.MovementType;
-import net.minecraft.entity.data.DataTracker;
-import net.minecraft.entity.data.TrackedData;
-import net.minecraft.entity.data.TrackedDataHandlerRegistry;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.particle.DustColorTransitionParticleEffect;
-import net.minecraft.particle.ParticleTypes;
-import org.joml.Vector3f;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.World;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.core.particles.DustColorTransitionOptions;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * 하늘로 날아가는 소원 연등(풍등).
@@ -22,9 +25,9 @@ import net.minecraft.world.World;
  * 눈에 보이지 않을 만큼 높이 올라가면 사라진다 (소원 기록은 WishData 에 남는다).
  */
 public class WishLanternEntity extends Entity {
-    private static final TrackedData<String> WISH = DataTracker.registerData(WishLanternEntity.class, TrackedDataHandlerRegistry.STRING);
-    private static final TrackedData<Integer> COLOR = DataTracker.registerData(WishLanternEntity.class, TrackedDataHandlerRegistry.INTEGER);
-    private static final TrackedData<Float> START_Y = DataTracker.registerData(WishLanternEntity.class, TrackedDataHandlerRegistry.FLOAT);
+    private static final EntityDataAccessor<String> WISH = SynchedEntityData.defineId(WishLanternEntity.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(WishLanternEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> START_Y = SynchedEntityData.defineId(WishLanternEntity.class, EntityDataSerializers.FLOAT);
 
     /** 이 높이만큼 올라가면 사라진다 (그 직전 40칸 동안 점점 작아져 보인다). */
     public static final float VANISH_HEIGHT = 190f;
@@ -35,50 +38,50 @@ public class WishLanternEntity extends Entity {
     private int stuck;
     private double windAngle, windPhase;
 
-    public WishLanternEntity(EntityType<? extends WishLanternEntity> type, World world) {
+    public WishLanternEntity(EntityType<? extends WishLanternEntity> type, Level world) {
         super(type, world);
         setNoGravity(true);
-        this.noClip = false;
-        this.windAngle = (this.getUuid().hashCode() & 1023) / 1024.0 * Math.PI * 2;
-        this.windPhase = ((this.getUuid().getLeastSignificantBits() >>> 7) & 1023) / 1024.0 * 100.0;
+        this.noPhysics = false;
+        this.windAngle = (this.getUUID().hashCode() & 1023) / 1024.0 * Math.PI * 2;
+        this.windPhase = ((this.getUUID().getLeastSignificantBits() >>> 7) & 1023) / 1024.0 * 100.0;
     }
 
-    public static int randomColor(Random r) {
+    public static int randomColor(RandomSource r) {
         // 사진 속 풍등처럼 따뜻한 황금빛이 대부분, 가끔 크림색과 살구빛
         int[] palette = {0xFFC870, 0xFFB45A, 0xFFD27A, 0xFFC870, 0xFFE2A0, 0xFFA848, 0xFFF0D0, 0xFFB890};
         return palette[r.nextInt(palette.length)];
     }
 
     public void setWish(String text, int rgb) {
-        dataTracker.set(WISH, text);
-        dataTracker.set(COLOR, rgb);
-        dataTracker.set(START_Y, (float) getY());
+        entityData.set(WISH, text);
+        entityData.set(COLOR, rgb);
+        entityData.set(START_Y, (float) getY());
     }
 
     /** 발사기에서 나온 연등: 이미 한창 떠오르는 상태로 시작한다. */
     public void fastStart(int ticks) { this.life = ticks; }
 
-    public String getWish() { return dataTracker.get(WISH); }
-    public int getColorRgb() { return dataTracker.get(COLOR); }
-    public float getStartY() { return dataTracker.get(START_Y); }
+    public String getWish() { return entityData.get(WISH); }
+    public int getColorRgb() { return entityData.get(COLOR); }
+    public float getStartY() { return entityData.get(START_Y); }
 
     @Override
-    protected void initDataTracker(DataTracker.Builder builder) {
-        builder.add(WISH, "");
-        builder.add(COLOR, 0xFFD870);
-        builder.add(START_Y, 0f);
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        builder.define(WISH, "");
+        builder.define(COLOR, 0xFFD870);
+        builder.define(START_Y, 0f);
     }
 
     @Override
-    protected void readCustomDataFromNbt(NbtCompound nbt) {
-        dataTracker.set(WISH, nbt.getString("Wish"));
-        dataTracker.set(COLOR, nbt.contains("Color") ? nbt.getInt("Color") : 0xFFD870);
-        dataTracker.set(START_Y, nbt.contains("StartY") ? nbt.getFloat("StartY") : (float) getY());
-        life = nbt.getInt("Life");
+    protected void readAdditionalSaveData(ValueInput nbt) {
+        entityData.set(WISH, nbt.getStringOr("Wish", ""));
+        entityData.set(COLOR, nbt.getIntOr("Color", 0xFFD870));
+        entityData.set(START_Y, nbt.getFloatOr("StartY", (float) getY()));
+        life = nbt.getIntOr("Life", 0);
     }
 
     @Override
-    protected void writeCustomDataToNbt(NbtCompound nbt) {
+    protected void addAdditionalSaveData(ValueOutput nbt) {
         nbt.putString("Wish", getWish());
         nbt.putInt("Color", getColorRgb());
         nbt.putFloat("StartY", getStartY());
@@ -89,17 +92,20 @@ public class WishLanternEntity extends Entity {
     public boolean isAttackable() { return false; }
 
     @Override
+    public boolean hurtServer(ServerLevel level, DamageSource source, float damage) { return false; }
+
+    @Override
     public boolean isPushable() { return false; }
 
     @Override
-    public boolean canHit() { return false; }
+    public boolean isPickable() { return false; }
 
     @Override
     public void tick() {
         super.tick();
         life++;
 
-        if (getWorld().isClient) {
+        if (level().isClientSide()) {
             clientEffects();
             return;
         }
@@ -123,46 +129,46 @@ public class WishLanternEntity extends Entity {
         double tx = Math.sin(ang) * speed * gust + Math.cos(ang) * sideways;
         double tz = Math.cos(ang) * speed * gust - Math.sin(ang) * sideways;
 
-        Vec3d v = getVelocity();
-        double vx = MathHelper.lerp(0.02, v.x, tx);
-        double vy = MathHelper.lerp(0.025, v.y, targetVy);
-        double vz = MathHelper.lerp(0.02, v.z, tz);
-        setVelocity(vx, vy, vz);
-        move(MovementType.SELF, getVelocity());
+        Vec3 v = getDeltaMovement();
+        double vx = Mth.lerp(0.02, v.x, tx);
+        double vy = Mth.lerp(0.025, v.y, targetVy);
+        double vz = Mth.lerp(0.02, v.z, tz);
+        setDeltaMovement(vx, vy, vz);
+        move(MoverType.SELF, getDeltaMovement());
 
         if (horizontalCollision) { // 벽에 닿으면 살짝 밀려난다
             windAngle += Math.PI * 0.6;
-            setVelocity(-vx * 0.5, getVelocity().y, -vz * 0.5);
+            setDeltaMovement(-vx * 0.5, getDeltaMovement().y, -vz * 0.5);
         }
-        if (verticalCollision && getVelocity().y >= -1.0e-4 && vy > 0.005) stuck++; else stuck = Math.max(0, stuck - 1);
+        if (verticalCollision && getDeltaMovement().y >= -1.0e-4 && vy > 0.005) stuck++; else stuck = Math.max(0, stuck - 1);
 
         // 천장에 막히거나, 물에 닿거나, 너무 오래 떠 있으면 꺼진다
-        if (stuck > 25 || isTouchingWater() || life > 20 * 600) {
+        if (stuck > 25 || isInWater() || life > 20 * 600) {
             burnOut();
             return;
         }
         // 눈에 보이지 않을 만큼 높이 올라가면 사라진다
-        World w = getWorld();
-        if (getY() - getStartY() > VANISH_HEIGHT || getY() > w.getTopY() - 1) {
+        Level w = level();
+        if (getY() - getStartY() > VANISH_HEIGHT || getY() > w.getMaxY()) {
             discard();
         }
     }
 
     private static double smooth(double t) {
-        t = MathHelper.clamp(t, 0.0, 1.0);
+        t = Mth.clamp(t, 0.0, 1.0);
         return t * t * (3.0 - 2.0 * t);
     }
 
     private void burnOut() {
-        if (getWorld() instanceof ServerWorld sw) {
-            sw.spawnParticles(ParticleTypes.SMOKE, getX(), getY() + 0.6, getZ(), 10, 0.25, 0.3, 0.25, 0.01);
+        if (level() instanceof ServerLevel sw) {
+            sw.sendParticles(ParticleTypes.SMOKE, getX(), getY() + 0.6, getZ(), 10, 0.25, 0.3, 0.25, 0.01);
         }
         discard();
     }
 
     /** 은은한 불씨: 작은 금빛 알갱이가 가끔 천천히 흩날린다 (핏방울처럼 보이는 파티클은 쓰지 않는다). */
     private void clientEffects() {
-        World w = getWorld();
+        Level w = level();
         float rise = (float) Math.min(1.0, life / 60.0);
         if (life % 3 == 0) {
             w.addParticle(ParticleTypes.SMALL_FLAME, getX() + (random.nextDouble() - 0.5) * 0.05, getY() + 0.2,
@@ -175,6 +181,5 @@ public class WishLanternEntity extends Entity {
         }
     }
 
-    private static final DustColorTransitionParticleEffect EMBER = new DustColorTransitionParticleEffect(
-            new Vector3f(1.0f, 0.82f, 0.45f), new Vector3f(1.0f, 0.55f, 0.2f), 0.55f);
+    private static final DustColorTransitionOptions EMBER = new DustColorTransitionOptions(0xFFD173, 0xFF8C33, 0.55f);
 }

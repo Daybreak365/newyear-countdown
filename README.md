@@ -1,12 +1,13 @@
-# New Year Countdown (Fabric 1.21.1)
+# New Year Countdown (Fabric 26.3)
 
 2027-01-01 00:00까지 남은 시간을 화면에 띄우는 카운트다운 HUD + 보신각 타종 모드.
 
 ## 빌드
 ```
-./gradlew build        # build/libs/newyear-countdown-1.0.0.jar
+./gradlew build        # build/libs/newyear-countdown-1.1.0.jar
 ```
-서버·클라이언트 모두에 jar 와 Fabric API 필요. (Mod Menu 는 선택)
+Minecraft 26.3, Fabric Loader 0.19.5 이상, Java 25 필요. 서버·클라이언트 모두에 jar 와 Fabric API 필요. (Mod Menu 는 선택)
+1.21.1 판은 커밋 `1cc92b3` 에 있습니다. 1.21.1 월드를 열면 오미쿠지·소원 기록은 새로 시작됩니다(저장 위치가 바뀜).
 
 ## 서버 설정 `config/newyearcountdown.json`
 `zone`, `target`(ISO 로컬시각), 종료 시 `title`/`subtitle`/`chatMessage`.

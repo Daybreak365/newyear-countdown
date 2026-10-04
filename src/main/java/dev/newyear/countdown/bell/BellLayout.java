@@ -1,17 +1,16 @@
 package dev.newyear.countdown.bell;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
-
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 보신각 구조물의 칸(블록) 배치.
@@ -83,27 +82,27 @@ public final class BellLayout {
             case NORTH -> { dx = -lx; dz = -lz; }
             default -> { dx = lz; dz = -lx; } // EAST
         }
-        return master.add(dx, ly, dz);
+        return master.offset(dx, ly, dz);
     }
 
     public static BlockPos masterOf(BlockPos partPos, BlockState part) {
-        int lx = part.get(BosingakPartBlock.OX) - 7;
-        int ly = part.get(BosingakPartBlock.OY);
-        int lz = part.get(BosingakPartBlock.OZ) - 2;
-        BlockPos offset = cell(BlockPos.ORIGIN, part.get(BosingakPartBlock.FACING), lx, ly, lz);
+        int lx = part.getValue(BosingakPartBlock.OX) - 7;
+        int ly = part.getValue(BosingakPartBlock.OY);
+        int lz = part.getValue(BosingakPartBlock.OZ) - 2;
+        BlockPos offset = cell(BlockPos.ZERO, part.getValue(BosingakPartBlock.FACING), lx, ly, lz);
         return partPos.subtract(offset);
     }
 
     // ---------------- 설치 / 철거 ----------------
 
     /** 전체 공간이 비어(대체 가능) 있고 높이 제한 안에 있는지. */
-    public static boolean canPlace(World world, BlockPos master, Direction facing) {
+    public static boolean canPlace(Level world, BlockPos master, Direction facing) {
         for (int x = MIN_X; x <= MAX_X; x++) {
             for (int y = MIN_Y; y <= MAX_Y; y++) {
                 for (int z = MIN_Z; z <= MAX_Z; z++) {
                     BlockPos p = cell(master, facing, x, y, z);
-                    if (world.isOutOfHeightLimit(p)) return false;
-                    if (!world.getBlockState(p).isReplaceable()) return false;
+                    if (world.isOutsideBuildHeight(p)) return false;
+                    if (!world.getBlockState(p).canBeReplaced()) return false;
                     if (!world.getFluidState(p).isEmpty()) return false; // 물/용암 속에는 설치 불가
                 }
             }
@@ -111,15 +110,15 @@ public final class BellLayout {
         return true;
     }
 
-    public static void place(World world, BlockPos master, Direction facing) {
-        world.setBlockState(master, ModBlocks.BOSINGAK_BELL.getDefaultState().with(BosingakBellBlock.FACING, facing), Block.NOTIFY_ALL);
+    public static void place(Level world, BlockPos master, Direction facing) {
+        world.setBlock(master, ModBlocks.BOSINGAK_BELL.defaultBlockState().setValue(BosingakBellBlock.FACING, facing), Block.UPDATE_ALL);
         for (int[] c : PART_CELLS) {
-            BlockState part = ModBlocks.BOSINGAK_PART.getDefaultState()
-                    .with(BosingakPartBlock.OX, c[0] + 7)
-                    .with(BosingakPartBlock.OY, c[1])
-                    .with(BosingakPartBlock.OZ, c[2] + 2)
-                    .with(BosingakPartBlock.FACING, facing);
-            world.setBlockState(cell(master, facing, c[0], c[1], c[2]), part, Block.NOTIFY_LISTENERS);
+            BlockState part = ModBlocks.BOSINGAK_PART.defaultBlockState()
+                    .setValue(BosingakPartBlock.OX, c[0] + 7)
+                    .setValue(BosingakPartBlock.OY, c[1])
+                    .setValue(BosingakPartBlock.OZ, c[2] + 2)
+                    .setValue(BosingakPartBlock.FACING, facing);
+            world.setBlock(cell(master, facing, c[0], c[1], c[2]), part, Block.UPDATE_CLIENTS);
         }
     }
 
@@ -127,23 +126,23 @@ public final class BellLayout {
      * 구조물 전체를 한 번에 제거한다. 마스터가 아직 남아 있었다면 아이템을 한 번만 떨어뜨린다.
      * 어느 칸이 먼저 부서지든(플레이어, 폭발 등) 여기로 모인다.
      */
-    public static void collapse(World world, BlockPos master, Direction facing, boolean drop) {
+    public static void collapse(Level world, BlockPos master, Direction facing, boolean drop) {
         if (COLLAPSING.get()) return;
         COLLAPSING.set(true);
         try {
-            boolean hadMaster = world.getBlockState(master).isOf(ModBlocks.BOSINGAK_BELL);
-            if (hadMaster) world.setBlockState(master, Blocks.AIR.getDefaultState(), Block.NOTIFY_LISTENERS);
+            boolean hadMaster = world.getBlockState(master).is(ModBlocks.BOSINGAK_BELL);
+            if (hadMaster) world.setBlock(master, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
             for (int[] c : PART_CELLS) {
                 BlockPos p = cell(master, facing, c[0], c[1], c[2]);
                 BlockState s = world.getBlockState(p);
-                if (s.isOf(ModBlocks.BOSINGAK_PART) && s.get(BosingakPartBlock.FACING) == facing
-                        && s.get(BosingakPartBlock.OX) == c[0] + 7 && s.get(BosingakPartBlock.OY) == c[1]
-                        && s.get(BosingakPartBlock.OZ) == c[2] + 2) {
-                    world.setBlockState(p, Blocks.AIR.getDefaultState(), Block.NOTIFY_LISTENERS);
+                if (s.is(ModBlocks.BOSINGAK_PART) && s.getValue(BosingakPartBlock.FACING) == facing
+                        && s.getValue(BosingakPartBlock.OX) == c[0] + 7 && s.getValue(BosingakPartBlock.OY) == c[1]
+                        && s.getValue(BosingakPartBlock.OZ) == c[2] + 2) {
+                    world.setBlock(p, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
                 }
             }
-            if (hadMaster && drop && world instanceof ServerWorld) {
-                Block.dropStack(world, master, new ItemStack(ModBlocks.BOSINGAK_BELL_ITEM));
+            if (hadMaster && drop && world instanceof ServerLevel) {
+                Block.popResource(world, master, new ItemStack(ModBlocks.BOSINGAK_BELL_ITEM));
             }
         } finally {
             COLLAPSING.set(false);
@@ -151,7 +150,7 @@ public final class BellLayout {
     }
 
     /** 플레이어가 부술 때: 크리에이티브면 아이템을 주지 않는다. */
-    public static void collapseByPlayer(World world, BlockPos master, Direction facing, PlayerEntity player) {
+    public static void collapseByPlayer(Level world, BlockPos master, Direction facing, Player player) {
         collapse(world, master, facing, !player.isCreative());
     }
 }
