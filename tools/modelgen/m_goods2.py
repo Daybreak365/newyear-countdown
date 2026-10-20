@@ -185,7 +185,7 @@ def firecracker(state=0):
 
 # ------------------------------------------------------------------ 새해 축하 사이다
 def cider(state=0):
-    """state: 0 기본 / 1 흔드는 중(거품) / 2 뻥! (마개 날아가고 거품 분수)"""
+    """state: 0 기본 / 1 흔드는 중(거품) / 2 분사 (마개 날아가고 거품 분수)"""
     B = []
     glass = '#2f8a4f'
     gl = lambda: Mat(glass, base=b_vgrad('#3da363', '#1f6a3a'), shape=('cylY', 8, 8), spec=1.0, shin=22, bevel=0.0, noise=0.006, ambient=0.7, diffuse=0.42)

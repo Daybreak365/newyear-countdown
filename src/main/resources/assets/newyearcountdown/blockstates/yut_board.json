@@ -1,8 +1,139 @@
 {
-  "variants": {
-    "facing=south": { "model": "newyearcountdown:block/yut_board" },
-    "facing=west": { "model": "newyearcountdown:block/yut_board", "y": 90 },
-    "facing=north": { "model": "newyearcountdown:block/yut_board", "y": 180 },
-    "facing=east": { "model": "newyearcountdown:block/yut_board", "y": 270 }
+ "variants": {
+  "facing=south,part=0": {
+   "model": "newyearcountdown:block/yut_board_0"
+  },
+  "facing=south,part=1": {
+   "model": "newyearcountdown:block/yut_board_1"
+  },
+  "facing=south,part=2": {
+   "model": "newyearcountdown:block/yut_board_2"
+  },
+  "facing=south,part=3": {
+   "model": "newyearcountdown:block/yut_board_3"
+  },
+  "facing=south,part=4": {
+   "model": "newyearcountdown:block/yut_board_4"
+  },
+  "facing=south,part=5": {
+   "model": "newyearcountdown:block/yut_board_5"
+  },
+  "facing=south,part=6": {
+   "model": "newyearcountdown:block/yut_board_6"
+  },
+  "facing=south,part=7": {
+   "model": "newyearcountdown:block/yut_board_7"
+  },
+  "facing=south,part=8": {
+   "model": "newyearcountdown:block/yut_board_8"
+  },
+  "facing=west,part=0": {
+   "model": "newyearcountdown:block/yut_board_0",
+   "y": 90
+  },
+  "facing=west,part=1": {
+   "model": "newyearcountdown:block/yut_board_1",
+   "y": 90
+  },
+  "facing=west,part=2": {
+   "model": "newyearcountdown:block/yut_board_2",
+   "y": 90
+  },
+  "facing=west,part=3": {
+   "model": "newyearcountdown:block/yut_board_3",
+   "y": 90
+  },
+  "facing=west,part=4": {
+   "model": "newyearcountdown:block/yut_board_4",
+   "y": 90
+  },
+  "facing=west,part=5": {
+   "model": "newyearcountdown:block/yut_board_5",
+   "y": 90
+  },
+  "facing=west,part=6": {
+   "model": "newyearcountdown:block/yut_board_6",
+   "y": 90
+  },
+  "facing=west,part=7": {
+   "model": "newyearcountdown:block/yut_board_7",
+   "y": 90
+  },
+  "facing=west,part=8": {
+   "model": "newyearcountdown:block/yut_board_8",
+   "y": 90
+  },
+  "facing=north,part=0": {
+   "model": "newyearcountdown:block/yut_board_0",
+   "y": 180
+  },
+  "facing=north,part=1": {
+   "model": "newyearcountdown:block/yut_board_1",
+   "y": 180
+  },
+  "facing=north,part=2": {
+   "model": "newyearcountdown:block/yut_board_2",
+   "y": 180
+  },
+  "facing=north,part=3": {
+   "model": "newyearcountdown:block/yut_board_3",
+   "y": 180
+  },
+  "facing=north,part=4": {
+   "model": "newyearcountdown:block/yut_board_4",
+   "y": 180
+  },
+  "facing=north,part=5": {
+   "model": "newyearcountdown:block/yut_board_5",
+   "y": 180
+  },
+  "facing=north,part=6": {
+   "model": "newyearcountdown:block/yut_board_6",
+   "y": 180
+  },
+  "facing=north,part=7": {
+   "model": "newyearcountdown:block/yut_board_7",
+   "y": 180
+  },
+  "facing=north,part=8": {
+   "model": "newyearcountdown:block/yut_board_8",
+   "y": 180
+  },
+  "facing=east,part=0": {
+   "model": "newyearcountdown:block/yut_board_0",
+   "y": 270
+  },
+  "facing=east,part=1": {
+   "model": "newyearcountdown:block/yut_board_1",
+   "y": 270
+  },
+  "facing=east,part=2": {
+   "model": "newyearcountdown:block/yut_board_2",
+   "y": 270
+  },
+  "facing=east,part=3": {
+   "model": "newyearcountdown:block/yut_board_3",
+   "y": 270
+  },
+  "facing=east,part=4": {
+   "model": "newyearcountdown:block/yut_board_4",
+   "y": 270
+  },
+  "facing=east,part=5": {
+   "model": "newyearcountdown:block/yut_board_5",
+   "y": 270
+  },
+  "facing=east,part=6": {
+   "model": "newyearcountdown:block/yut_board_6",
+   "y": 270
+  },
+  "facing=east,part=7": {
+   "model": "newyearcountdown:block/yut_board_7",
+   "y": 270
+  },
+  "facing=east,part=8": {
+   "model": "newyearcountdown:block/yut_board_8",
+   "y": 270
   }
+ }
 }

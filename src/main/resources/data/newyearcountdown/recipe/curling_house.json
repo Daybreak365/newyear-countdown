@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "minecraft:blue_wool",
+    "minecraft:white_wool",
+    "minecraft:red_wool"
+  ],
+  "result": {
+    "id": "newyearcountdown:curling_house"
+  }
+}

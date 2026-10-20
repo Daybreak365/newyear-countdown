@@ -1,14 +1,14 @@
 package dev.newyear.countdown.client;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import dev.newyear.countdown.NewYearCountdown;
 import dev.newyear.countdown.bell.BosingakBellBlockEntity;
-import net.minecraft.client.render.OverlayTexture;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.RotationAxis;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.resources.Identifier;
 
 /**
  * 보신각 3D 모델 (구조물 좌표계: 마스터 칸 바닥 중심이 원점, 정면이 +Z, 폭은 X).
@@ -28,7 +28,7 @@ public final class BellModel {
     private static final Identifier T_LOG_TOP = mc("dark_oak_log_top");
     private static final Identifier T_IRON = mc("polished_blackstone");
     // 모드 자체 텍스처
-    private static final Identifier T_ROPE = Identifier.of(NewYearCountdown.MOD_ID, "textures/block/rope.png");
+    private static final Identifier T_ROPE = Identifier.fromNamespaceAndPath(NewYearCountdown.MOD_ID, "textures/block/rope.png");
 
     private static final int WHITE = 0xFFFFFFFF;
     private static final int BRONZE = tint(0.80f, 0.62f, 0.40f);   // 금 블록 텍스처를 청동색으로
@@ -45,7 +45,7 @@ public final class BellModel {
     private BellModel() {}
 
     private static Identifier mc(String name) {
-        return Identifier.ofVanilla("textures/block/" + name + ".png");
+        return Identifier.withDefaultNamespace("textures/block/" + name + ".png");
     }
 
     private static int tint(float r, float g, float b) {
@@ -53,7 +53,7 @@ public final class BellModel {
     }
 
     /** 일반 그리기. 호출자가 이미 구조물 좌표계로 변환해 둔 상태여야 한다. */
-    public static void draw(VertexConsumerProvider providers, MatrixStack m, int light,
+    public static void draw(GeoBuffers providers, PoseStack m, int light,
                             float strikerAngle, float bellSway) {
         Painter p = new Painter(providers, m, light, 0);
         drawFrame(p);
@@ -62,7 +62,7 @@ public final class BellModel {
     }
 
     /** 홀로그램 그리기 (반투명 단색 틴트). */
-    public static void drawGhost(VertexConsumerProvider providers, MatrixStack m, int argb) {
+    public static void drawGhost(GeoBuffers providers, PoseStack m, int argb) {
         Painter p = new Painter(providers, m, 0xF000F0, argb);
         drawFrame(p);
         drawBell(p, 0f);
@@ -113,9 +113,9 @@ public final class BellModel {
         float hang = BosingakBellBlockEntity.HANG_Y;
         float y0 = BosingakBellBlockEntity.BELL_BOTTOM_Y;
 
-        p.m.push();
+        p.m.pushPose();
         p.m.translate(0, hang, 0);
-        p.m.multiply(RotationAxis.POSITIVE_Z.rotation(sway));  // 매단 지점을 축으로 흔들림
+        p.m.rotate(Axis.ZP.rotation(sway));  // 매단 지점을 축으로 흔들림
         p.m.translate(0, -hang, 0);
 
         for (float[] l : BELL_LAYERS) {
@@ -148,7 +148,7 @@ public final class BellModel {
         p.box(-0.22f, top + 0.3f, -0.1f, 0.22f, top + 0.45f, 0.1f);
         p.use(T_IRON, WHITE);
         p.box(-0.06f, top + 0.45f, -0.06f, 0.06f, hang, 0.06f);
-        p.m.pop();
+        p.m.popPose();
     }
 
     // ======================= 당목 (통나무) =======================
@@ -162,19 +162,19 @@ public final class BellModel {
         // 두 가닥의 줄
         p.use(T_ROPE, WHITE);
         for (int side = -1; side <= 1; side += 2) {
-            p.m.push();
+            p.m.pushPose();
             p.m.translate(cx + 0.8f * side, topY, 0);
-            p.m.multiply(RotationAxis.POSITIVE_Z.rotation(angle));
+            p.m.rotate(Axis.ZP.rotation(angle));
             p.box(-0.05f, -len + 0.18f, -0.05f, 0.05f, 0f, 0.05f);
-            p.m.pop();
+            p.m.popPose();
         }
 
         // 통나무: 줄 길이만큼 내려간 뒤 수평을 유지
-        p.m.push();
+        p.m.pushPose();
         p.m.translate(cx, topY, 0);
-        p.m.multiply(RotationAxis.POSITIVE_Z.rotation(angle));
+        p.m.rotate(Axis.ZP.rotation(angle));
         p.m.translate(0, -len, 0);
-        p.m.multiply(RotationAxis.POSITIVE_Z.rotation(-angle));
+        p.m.rotate(Axis.ZP.rotation(-angle));
 
         p.use(T_LOG, WHITE);
         p.boxAlongX(-h, -0.2f, -0.2f, h, 0.2f, 0.2f);
@@ -197,15 +197,15 @@ public final class BellModel {
         for (int side = -1; side <= 1; side += 2) {
             p.box(side * 0.8f - 0.08f, 0.2f, -0.08f, side * 0.8f + 0.08f, 0.3f, 0.08f);        // 줄 매듭
         }
-        p.m.pop();
+        p.m.popPose();
     }
 
     // ======================= 그리기 도우미 =======================
 
     /** 재질(텍스처+색)을 바꿔가며 박스를 그리는 도우미. 16px = 1블록 밀도로 텍스처를 타일링한다. */
     static final class Painter {
-        final VertexConsumerProvider providers;
-        final MatrixStack m;
+        final GeoBuffers providers;
+        final PoseStack m;
         final int light;
         final int ghost; // 0 이면 일반, 아니면 홀로그램 색(ARGB)
         Identifier current;
@@ -215,7 +215,7 @@ public final class BellModel {
         boolean fullUv;         // true 면 면 하나에 텍스처 전체(0~1)를 입힌다 (작은 부품에 전용 텍스처를 쓸 때)
         VertexConsumer vc;
 
-        Painter(VertexConsumerProvider providers, MatrixStack m, int light, int ghost) {
+        Painter(GeoBuffers providers, PoseStack m, int light, int ghost) {
             this.providers = providers;
             this.m = m;
             this.light = light;
@@ -241,13 +241,13 @@ public final class BellModel {
             this.color = color;
             if (!tex.equals(current)) {
                 current = tex;
-                vc = providers.getBuffer((ghost != 0 || translucent) ? RenderLayer.getEntityTranslucent(tex) : RenderLayer.getEntityCutoutNoCull(tex));
+                vc = providers.getBuffer((ghost != 0 || translucent) ? RenderTypes.entityTranslucent(tex) : RenderTypes.entityCutout(tex));
             }
         }
 
         /** 여섯 면을 모두 그리는 일반 박스. */
         void box(float x1, float y1, float z1, float x2, float y2, float z2) {
-            MatrixStack.Entry e = m.peek();
+            PoseStack.Pose e = m.last();
             faceXp(e, x1, y1, z1, x2, y2, z2, false);
             faceXn(e, x1, y1, z1, x2, y2, z2, false);
             faceZp(e, x1, y1, z1, x2, y2, z2, false);
@@ -258,7 +258,7 @@ public final class BellModel {
 
         /** X 방향으로 누운 통나무의 옆면(±Y, ±Z): 나뭇결이 X 방향으로 흐르도록 UV 를 돌린다. */
         void boxAlongX(float x1, float y1, float z1, float x2, float y2, float z2) {
-            MatrixStack.Entry e = m.peek();
+            PoseStack.Pose e = m.last();
             faceZp(e, x1, y1, z1, x2, y2, z2, true);
             faceZn(e, x1, y1, z1, x2, y2, z2, true);
             faceYp(e, x1, y1, z1, x2, y2, z2, true);
@@ -267,32 +267,32 @@ public final class BellModel {
 
         /** 통나무 양 끝면(±X). */
         void endCapsX(float x1, float x2, float y1, float y2, float z1, float z2) {
-            MatrixStack.Entry e = m.peek();
+            PoseStack.Pose e = m.last();
             faceXp(e, x1, y1, z1, x2, y2, z2, false);
             faceXn(e, x1, y1, z1, x2, y2, z2, false);
         }
 
-        private void faceXp(MatrixStack.Entry e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
+        private void faceXp(PoseStack.Pose e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
             tile(e, x2, y1, z2, 0, 0, -1, z2 - z1, 0, 1, 0, y2 - y1, 1, 0, 0, r);
         }
 
-        private void faceXn(MatrixStack.Entry e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
+        private void faceXn(PoseStack.Pose e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
             tile(e, x1, y1, z1, 0, 0, 1, z2 - z1, 0, 1, 0, y2 - y1, -1, 0, 0, r);
         }
 
-        private void faceZp(MatrixStack.Entry e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
+        private void faceZp(PoseStack.Pose e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
             tile(e, x1, y1, z2, 1, 0, 0, x2 - x1, 0, 1, 0, y2 - y1, 0, 0, 1, r);
         }
 
-        private void faceZn(MatrixStack.Entry e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
+        private void faceZn(PoseStack.Pose e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
             tile(e, x2, y1, z1, -1, 0, 0, x2 - x1, 0, 1, 0, y2 - y1, 0, 0, -1, r);
         }
 
-        private void faceYp(MatrixStack.Entry e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
+        private void faceYp(PoseStack.Pose e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
             tile(e, x1, y2, z2, 1, 0, 0, x2 - x1, 0, 0, -1, z2 - z1, 0, 1, 0, r);
         }
 
-        private void faceYn(MatrixStack.Entry e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
+        private void faceYn(PoseStack.Pose e, float x1, float y1, float z1, float x2, float y2, float z2, boolean r) {
             tile(e, x1, y1, z1, 1, 0, 0, x2 - x1, 0, 0, 1, z2 - z1, 0, -1, 0, r);
         }
 
@@ -300,7 +300,7 @@ public final class BellModel {
          * 한 면을 1블록 단위 타일로 쪼개 그린다 (각 타일은 텍스처 전체 한 장).
          * O: 시작점, U/V: 단위 방향(길이 lu, lv), N: 법선.
          */
-        private void tile(MatrixStack.Entry e, float ox, float oy, float oz,
+        private void tile(PoseStack.Pose e, float ox, float oy, float oz,
                           float ux, float uy, float uz, float lu,
                           float vx, float vy, float vz, float lv,
                           float nx, float ny, float nz, boolean rotate) {
@@ -324,12 +324,12 @@ public final class BellModel {
             }
         }
 
-        private void vertex(MatrixStack.Entry e, float x, float y, float z, float u, float v, boolean rotate,
+        private void vertex(PoseStack.Pose e, float x, float y, float z, float u, float v, boolean rotate,
                             float nx, float ny, float nz) {
             float uu = rotate ? v : u;
             float vv = rotate ? 1f - u : v;
-            vc.vertex(e, x, y, z).color(color).texture(uu, vv)
-                    .overlay(OverlayTexture.DEFAULT_UV).light(lightOverride >= 0 ? lightOverride : light).normal(e, nx, ny, nz);
+            vc.addVertex(e, x, y, z).setColor(color).setUv(uu, vv)
+                    .setOverlay(OverlayTexture.NO_OVERLAY).setLight(lightOverride >= 0 ? lightOverride : light).setNormal(e, nx, ny, nz);
         }
     }
 }

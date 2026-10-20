@@ -2,9 +2,23 @@
   "type": "minecraft:block",
   "pools": [
     {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
       "rolls": 1,
-      "entries": [ { "type": "minecraft:item", "name": "newyearcountdown:yut_set" } ],
-      "conditions": [ { "condition": "minecraft:survives_explosion" } ]
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "newyearcountdown:yut_board",
+            "state": {
+              "part": "4"
+            }
+          },
+          "name": "newyearcountdown:yut_set"
+        }
+      ]
     }
   ]
 }

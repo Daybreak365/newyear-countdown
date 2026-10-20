@@ -1,14 +1,14 @@
 package dev.newyear.countdown.client;
 
+import net.minecraft.client.input.MouseButtonEvent;
 import dev.newyear.countdown.SetTargetPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.text.Text;
-
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -26,13 +26,13 @@ public class SettingsScreen extends Screen {
     private static final long CLICK_WINDOW_MS = 3000;
 
     private final Screen parent;
-    private TextFieldWidget dateField;
-    private Text message = Text.empty();
+    private EditBox dateField;
+    private Component message = Component.empty();
     private int titleClicks = 0;
     private long lastTitleClick = 0;
 
     public SettingsScreen(Screen parent) {
-        super(Text.translatable("screen.newyearcountdown.title"));
+        super(Component.translatable("screen.newyearcountdown.title"));
         this.parent = parent;
     }
 
@@ -44,78 +44,78 @@ public class SettingsScreen extends Screen {
         int x = cx - w / 2;
         int y = 36;
 
-        addDrawableChild(ButtonWidget.builder(hudLabel(cfg), b -> {
+        addRenderableWidget(Button.builder(hudLabel(cfg), b -> {
             cfg.enabled = !cfg.enabled;
             b.setMessage(hudLabel(cfg));
-        }).dimensions(x, y, w, 20).build());
+        }).bounds(x, y, w, 20).build());
         y += 24;
 
         int hw = (w - 6) / 2;
-        addDrawableChild(ButtonWidget.builder(positionLabel(cfg), b -> {
+        addRenderableWidget(Button.builder(positionLabel(cfg), b -> {
             cfg.position = cfg.position.next();
             b.setMessage(positionLabel(cfg));
-        }).dimensions(x, y, hw, 20).build());
-        addDrawableChild(ButtonWidget.builder(scaleLabel(cfg), b -> {
+        }).bounds(x, y, hw, 20).build());
+        addRenderableWidget(Button.builder(scaleLabel(cfg), b -> {
             cfg.scaleIndex = (cfg.scaleIndex + 1) % ClientConfig.SCALES.length;
             b.setMessage(scaleLabel(cfg));
-        }).dimensions(x + hw + 6, y, hw, 20).build());
+        }).bounds(x + hw + 6, y, hw, 20).build());
         y += 24;
 
-        addDrawableChild(ButtonWidget.builder(themeLabel(cfg), b -> {
+        addRenderableWidget(Button.builder(themeLabel(cfg), b -> {
             cfg.theme = cfg.theme.next();
             b.setMessage(themeLabel(cfg));
-        }).dimensions(x, y, hw, 20).build());
-        addDrawableChild(ButtonWidget.builder(tickLabel(cfg), b -> {
+        }).bounds(x, y, hw, 20).build());
+        addRenderableWidget(Button.builder(tickLabel(cfg), b -> {
             cfg.tickSound = !cfg.tickSound;
             b.setMessage(tickLabel(cfg));
-        }).dimensions(x + hw + 6, y, hw, 20).build());
+        }).bounds(x + hw + 6, y, hw, 20).build());
         y += 28;
 
         if (DebugAccess.unlocked()) {
             // ---- 숨겨진 디버그 섹션 ----
             y += 12; // 헤더 자리
-            dateField = new TextFieldWidget(textRenderer, x, y, w, 20, Text.empty());
+            dateField = new EditBox(font, x, y, w, 20, Component.empty());
             dateField.setMaxLength(19);
             ZonedDateTime t = Instant.ofEpochMilli(ClientCountdown.targetMs()).atZone(ClientCountdown.zone());
-            dateField.setText(INPUT_FORMAT.format(t));
-            addDrawableChild(dateField);
+            dateField.setValue(INPUT_FORMAT.format(t));
+            addRenderableWidget(dateField);
             y += 24;
 
             int bw = (w - 6) / 2;
-            addDrawableChild(ButtonWidget.builder(Text.translatable("debug.newyearcountdown.apply"), b -> applyDateField())
-                    .dimensions(x, y, bw, 20).build());
-            addDrawableChild(ButtonWidget.builder(Text.translatable("debug.newyearcountdown.reset"), b -> {
+            addRenderableWidget(Button.builder(Component.translatable("debug.newyearcountdown.apply"), b -> applyDateField())
+                    .bounds(x, y, bw, 20).build());
+            addRenderableWidget(Button.builder(Component.translatable("debug.newyearcountdown.reset"), b -> {
                 send(SetTargetPayload.RESET, 0, -1);
-                message = Text.empty();
-            }).dimensions(x + bw + 6, y, bw, 20).build());
+                message = Component.empty();
+            }).bounds(x + bw + 6, y, bw, 20).build());
             y += 24;
 
-            addDrawableChild(quick("debug.newyearcountdown.in10s", 10, x, y, bw));
-            addDrawableChild(quick("debug.newyearcountdown.in1m", 60, x + bw + 6, y, bw));
+            addRenderableWidget(quick("debug.newyearcountdown.in10s", 10, x, y, bw));
+            addRenderableWidget(quick("debug.newyearcountdown.in1m", 60, x + bw + 6, y, bw));
             y += 24;
-            addDrawableChild(quick("debug.newyearcountdown.in10m", 600, x, y, bw));
-            addDrawableChild(quick("debug.newyearcountdown.in1h", 3600, x + bw + 6, y, bw));
+            addRenderableWidget(quick("debug.newyearcountdown.in10m", 600, x, y, bw));
+            addRenderableWidget(quick("debug.newyearcountdown.in1h", 3600, x + bw + 6, y, bw));
         }
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("screen.newyearcountdown.done"), b -> close())
-                .dimensions(x, height - 28, w, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("screen.newyearcountdown.done"), b -> onClose())
+                .bounds(x, height - 28, w, 20).build());
     }
 
-    private ButtonWidget quick(String key, int seconds, int x, int y, int w) {
-        return ButtonWidget.builder(Text.translatable(key), b -> {
+    private Button quick(String key, int seconds, int x, int y, int w) {
+        return Button.builder(Component.translatable(key), b -> {
             send(SetTargetPayload.RELATIVE_SECONDS, seconds, System.currentTimeMillis() + seconds * 1000L);
-            message = Text.empty();
-        }).dimensions(x, y, w, 20).build();
+            message = Component.empty();
+        }).bounds(x, y, w, 20).build();
     }
 
     private void applyDateField() {
         try {
-            long ms = LocalDateTime.parse(dateField.getText().trim(), INPUT_FORMAT)
+            long ms = LocalDateTime.parse(dateField.getValue().trim(), INPUT_FORMAT)
                     .atZone(ClientCountdown.zone()).toInstant().toEpochMilli();
             send(SetTargetPayload.ABSOLUTE, ms, ms);
-            message = Text.empty();
+            message = Component.empty();
         } catch (Exception e) {
-            message = Text.translatable("debug.newyearcountdown.bad_format").styled(s -> s.withColor(0xFF6B6B));
+            message = Component.translatable("debug.newyearcountdown.bad_format").withStyle(s -> s.withColor(0xFF6B6B));
         }
     }
 
@@ -127,50 +127,50 @@ public class SettingsScreen extends Screen {
             ClientCountdown.reset();
         } else {
             ClientCountdown.setLocalDebug(localTargetMs);
-            message = Text.translatable("debug.newyearcountdown.local_only").styled(s -> s.withColor(0xFFC857));
+            message = Component.translatable("debug.newyearcountdown.local_only").withStyle(s -> s.withColor(0xFFC857));
         }
     }
 
-    private static Text hudLabel(ClientConfig cfg) {
-        return Text.translatable("screen.newyearcountdown.hud",
-                Text.translatable(cfg.enabled ? "screen.newyearcountdown.on" : "screen.newyearcountdown.off"));
+    private static Component hudLabel(ClientConfig cfg) {
+        return Component.translatable("screen.newyearcountdown.hud",
+                Component.translatable(cfg.enabled ? "screen.newyearcountdown.on" : "screen.newyearcountdown.off"));
     }
 
-    private static Text positionLabel(ClientConfig cfg) {
-        return Text.translatable("screen.newyearcountdown.position", Text.translatable(cfg.position.key()));
+    private static Component positionLabel(ClientConfig cfg) {
+        return Component.translatable("screen.newyearcountdown.position", Component.translatable(cfg.position.key()));
     }
 
-    private static Text themeLabel(ClientConfig cfg) {
-        return Text.translatable("screen.newyearcountdown.theme", Text.translatable(cfg.theme.key()));
+    private static Component themeLabel(ClientConfig cfg) {
+        return Component.translatable("screen.newyearcountdown.theme", Component.translatable(cfg.theme.key()));
     }
 
-    private static Text tickLabel(ClientConfig cfg) {
-        return Text.translatable("screen.newyearcountdown.tick",
-                Text.translatable(cfg.tickSound ? "screen.newyearcountdown.on" : "screen.newyearcountdown.off"));
+    private static Component tickLabel(ClientConfig cfg) {
+        return Component.translatable("screen.newyearcountdown.tick",
+                Component.translatable(cfg.tickSound ? "screen.newyearcountdown.on" : "screen.newyearcountdown.off"));
     }
 
-    private static Text scaleLabel(ClientConfig cfg) {
-        return Text.translatable("screen.newyearcountdown.scale", Math.round(cfg.scale() * 100) + "%");
+    private static Component scaleLabel(ClientConfig cfg) {
+        return Component.translatable("screen.newyearcountdown.scale", Math.round(cfg.scale() * 100) + "%");
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        super.render(ctx, mouseX, mouseY, delta);
-        ctx.drawCenteredTextWithShadow(textRenderer, title, width / 2, 15, 0xFFFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
+        ctx.centeredText(font, title, width / 2, 15, 0xFFFFFFFF);
 
         if (DebugAccess.unlocked()) {
             int x = width / 2 - 100;
             int hy = 36 + 24 * 2 + 28 + 2;
-            Text header = Text.translatable("debug.newyearcountdown.header");
-            ctx.drawTextWithShadow(textRenderer, header, x, hy, 0xFFFF6B6B);
-            ctx.drawTextWithShadow(textRenderer, Text.translatable("debug.newyearcountdown.field_hint", ClientCountdown.zone().getId()),
-                    x + textRenderer.getWidth(header) + 6, hy, 0xFF777B88);
+            Component header = Component.translatable("debug.newyearcountdown.header");
+            ctx.text(font, header, x, hy, 0xFFFF6B6B);
+            ctx.text(font, Component.translatable("debug.newyearcountdown.field_hint", ClientCountdown.zone().getId()),
+                    x + font.width(header) + 6, hy, 0xFF777B88);
 
             long rem = ClientCountdown.targetMs() - ClientCountdown.now();
-            Text status = Text.translatable("debug.newyearcountdown.status", CountdownHud.formatTarget(), formatRemaining(rem));
-            ctx.drawCenteredTextWithShadow(textRenderer, status, width / 2, height - 52, 0xFFA0A4B0);
+            Component status = Component.translatable("debug.newyearcountdown.status", CountdownHud.formatTarget(), formatRemaining(rem));
+            ctx.centeredText(font, status, width / 2, height - 52, 0xFFA0A4B0);
             if (!message.getString().isEmpty()) {
-                ctx.drawCenteredTextWithShadow(textRenderer, message, width / 2, height - 42, 0xFFFFFFFF);
+                ctx.centeredText(font, message, width / 2, height - 42, 0xFFFFFFFF);
             }
         }
     }
@@ -182,9 +182,11 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x(), mouseY = event.y();
+        int button = event.button();
         // 제목 영역을 연속 클릭하면 디버그 해제
-        int tw = textRenderer.getWidth(title);
+        int tw = font.width(title);
         boolean onTitle = mouseY >= 10 && mouseY <= 27 && Math.abs(mouseX - width / 2.0) <= tw / 2.0 + 6;
         if (onTitle && button == 0 && !DebugAccess.unlocked()) {
             long now = System.currentTimeMillis();
@@ -192,16 +194,16 @@ public class SettingsScreen extends Screen {
             lastTitleClick = now;
             if (titleClicks >= UNLOCK_CLICKS) {
                 titleClicks = 0;
-                MinecraftClient.getInstance().setScreen(new PasswordScreen(this));
+                Minecraft.getInstance().gui.setScreen(new PasswordScreen(this));
             }
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public void close() {
+    public void onClose() {
         ClientConfig.save();
-        MinecraftClient.getInstance().setScreen(parent);
+        Minecraft.getInstance().gui.setScreen(parent);
     }
 }

@@ -24,30 +24,45 @@ def sparkle(B, cx, cy, cz, s, color='#fff3b0'):
     B.append(Box((cx - s * 0.4, cy - s * 0.4, cz - 0.08), (cx + s * 0.4, cy + s * 0.4, cz + 0.08), m, rot=('z', 45, (cx, cy, 0))))
 
 
-# ------------------------------------------------------------------ 2027 안경
+# ------------------------------------------------------------------ 2027 안경 (착용 텍스처와 같은 디자인: 투명 렌즈 + 속 빈 금색 글자)
+def _lens_art(txt, w_u, h_u, ppu=44):
+    """속이 빈 금색 윤곽선 글자만 있는 투명 이미지 (armor_texture.py 와 같은 방식)."""
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFilter
+    W, H = int(w_u * ppu), int(h_u * ppu)
+    mask = Image.new('L', (W, H), 0)
+    ImageDraw.Draw(mask).text((W / 2, H / 2 + ppu * 0.05), txt, font=font(h_u * 0.78 * ppu), fill=255, anchor='mm')
+    k = max(3, int(0.17 * ppu) // 2 * 2 + 1)
+    grow = mask.filter(ImageFilter.MaxFilter(k))
+    edge = np.clip(np.array(grow, dtype=int) - np.array(mask, dtype=int), 0, 255).astype(np.uint8)
+    grow2 = mask.filter(ImageFilter.MaxFilter(k + 2 * max(1, int(0.07 * ppu))))
+    shadow = np.clip(np.array(grow2, dtype=int) - np.array(grow, dtype=int), 0, 255).astype(np.uint8)
+    out = np.zeros((H, W, 4), dtype=np.uint8)
+    out[..., :3] = (120, 70, 4); out[..., 3] = shadow
+    top = np.zeros((H, W, 4), dtype=np.uint8)
+    top[..., :3] = (255, 214, 64); top[..., 3] = edge
+    return Image.alpha_composite(Image.fromarray(out, 'RGBA'), Image.fromarray(top, 'RGBA'))
+
+
 def glasses():
     B = []
-    gm = gold(GOLD, bevel=0.08)
-    for i, (x1, x2, txt) in enumerate(((1.0, 7.4, '20'), (8.6, 15.0, '27'))):
-        img, d, ppu = art(6.4, 5.4, 36)
-        d.text((3.2 * ppu, 2.75 * ppu), txt, font=font(3.3 * ppu), fill=rgba('#f6c945'), anchor='mm', stroke_width=int(0.12 * ppu), stroke_fill=rgba('#a8730d'))
-        d.line([(0.6 * ppu, 4.4 * ppu), (2.2 * ppu, 0.7 * ppu)], fill=(255, 255, 255, 150), width=int(0.3 * ppu))
-        d.line([(1.4 * ppu, 4.7 * ppu), (2.4 * ppu, 2.4 * ppu)], fill=(255, 255, 255, 110), width=int(0.18 * ppu))
-        lens = Mat('#8fd0ff', base=b_vgrad('#cfeeff', '#6db4ee'), alpha=0.7, spec=0.9, noise=0.0, bevel=0.0).overlay(ov_image(img, x1 + 0.0, 11.4, ppu))
-        B.append(Box((x1 + 0.3, 6.4, 7.55), (x2 - 0.3, 11.0, 8.25), {'south': lens, 'north': lens, '*': lens}))
-        B.extend(frame(x1, 6.0, 7.2, x2, 11.4, 8.6, 0.75, gm))
-        # 모서리 각진 장식
-        for cx_, cy_ in ((x1 + 0.2, 6.2), (x2 - 0.2, 6.2)):
-            B.append(Box((cx_ - 0.45, cy_ - 0.45, 7.1), (cx_ + 0.45, cy_ + 0.45, 8.7), gold('#fff0a8', bevel=0.05), rot=('z', 45, (cx_, cy_, 0))))
-    B.append(Box((7.4, 8.9, 7.3), (8.6, 10.0, 8.5), gm))
-    B.append(Box((7.5, 6.6, 7.5), (8.5, 7.6, 8.0), gm))
-    for sx in (0.2, 15.0):
-        B.append(Box((sx, 9.2, 0.6), (sx + 0.8, 10.2, 7.9), gm))
-        hook = sx
-        B.append(Box((hook, 7.0, 0.6), (hook + 0.8, 10.2, 1.5), gm))
-    for sx in (-0.1, 15.0):
-        pass
-    return Model('party_glasses', B, density=9, gui=(22, -30, 0), ground_scale=0.5, kind='item')
+    gm = gold('#e9b52a', bevel=0.06)
+    LH = 4.6    # 렌즈 높이 (착용 텍스처와 같은 가로:세로 비율)
+    y0, y1 = 7.0, 7.0 + LH
+    for (x1, x2, txt) in ((1.0, 7.4, '20'), (8.6, 15.0, '27')):
+        art_img = _lens_art(txt, x2 - x1 - 0.8, LH - 0.8)
+
+        def paste(d, ctx, k, _a=art_img):
+            big = d._image
+            big.alpha_composite(_a.resize(big.size))
+        clear = Mat('#ffffff', alpha=0.0, noise=0.0, bevel=0.0).decal(paste)
+        B.append(Box((x1 + 0.4, y0 + 0.4, 7.7), (x2 - 0.4, y1 - 0.4, 8.1), {'south': clear, 'north': clear, '*': clear}, faces=['south', 'north']))
+        B.extend(frame(x1, y0, 7.3, x2, y1, 8.5, 0.5, gm))
+    B.append(Box((7.4, 8.9, 7.5), (8.6, 9.6, 8.3), gm))
+    for sx in (0.7, 14.5):
+        B.append(Box((sx, 9.0, 1.0), (sx + 0.8, 9.7, 7.9), gm))
+        B.append(Box((sx, 7.9, 1.0), (sx + 0.8, 9.7, 1.8), gm))
+    return Model('party_glasses', B, density=9, gui=(20, -30, 0), ground_scale=0.5, kind='item')
 
 
 # ------------------------------------------------------------------ 새해 복주머니

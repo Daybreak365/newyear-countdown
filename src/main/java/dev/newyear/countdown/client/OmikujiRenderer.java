@@ -1,88 +1,108 @@
 package dev.newyear.countdown.client;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import dev.newyear.countdown.omikuji.Fortunes;
 import dev.newyear.countdown.omikuji.OmikujiBlock;
 import dev.newyear.countdown.omikuji.OmikujiBlockEntity;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.WorldRenderer;
-import net.minecraft.client.render.block.entity.BlockEntityRenderer;
-import net.minecraft.client.render.block.entity.BlockEntityRendererFactory;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
-import net.minecraft.world.World;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
+import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
+import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
 
-public class OmikujiRenderer implements BlockEntityRenderer<OmikujiBlockEntity> {
-    private final TextRenderer textRenderer;
+public class OmikujiRenderer implements BlockEntityRenderer<OmikujiBlockEntity, BeState<OmikujiBlockEntity>> {
+    private final Font textRenderer;
 
-    public OmikujiRenderer(BlockEntityRendererFactory.Context ctx) {
-        this.textRenderer = ctx.getTextRenderer();
+    public OmikujiRenderer(BlockEntityRendererProvider.Context ctx) {
+        this.textRenderer = ctx.font();
     }
 
     @Override
-    public boolean rendersOutsideBoundingBox(OmikujiBlockEntity be) {
+    public boolean shouldRenderOffScreen() {
         return true;
     }
 
     @Override
-    public int getRenderDistance() {
-        return 96;
+    public BeState<OmikujiBlockEntity> createRenderState() {
+        return new BeState<>();
     }
 
     @Override
-    public void render(OmikujiBlockEntity be, float tickDelta, MatrixStack m, VertexConsumerProvider providers, int light, int overlay) {
-        World world = be.getWorld();
-        if (world == null) return;
-        int lt = WorldRenderer.getLightmapCoordinates(world, be.getPos().up(4));
-        float time = world.getTime() + tickDelta;
-        float age = (world.getTime() - be.animStart) + tickDelta;
-        float yaw = be.getCachedState().get(OmikujiBlock.FACING).asRotation();
+    public void extractRenderState(OmikujiBlockEntity be, BeState<OmikujiBlockEntity> state, float partialTicks, Vec3 camera,
+                                   ModelFeatureRenderer.@Nullable CrumblingOverlay breakProgress) {
+        BlockEntityRenderer.super.extractRenderState(be, state, partialTicks, camera, breakProgress);
+        state.be = be;
+        state.partialTicks = partialTicks;
+    }
 
-        m.push();
+    @Override
+    public void submit(BeState<OmikujiBlockEntity> state, PoseStack m, SubmitNodeCollector collector, CameraRenderState camera) {
+        GeoBuffers buffers = new GeoBuffers();
+        render(state.be, state.partialTicks, m, buffers, camera, state.lightCoords);
+        buffers.flush(collector);
+    }
+
+    @Override
+    public int getViewDistance() {
+        return 96;
+    }
+
+    private void render(OmikujiBlockEntity be, float tickDelta, PoseStack m, GeoBuffers providers, CameraRenderState camera, int light) {
+        Level world = be.getLevel();
+        if (world == null) return;
+        int lt = LightCoordsUtil.getLightCoords(world, be.getBlockPos().above(4));
+        float time = world.getGameTime() + tickDelta;
+        float age = (world.getGameTime() - be.animStart) + tickDelta;
+        float yaw = be.getBlockState().getValue(OmikujiBlock.FACING).toYRot();
+
+        m.pushPose();
         m.translate(0.5, 0, 0.5);
-        m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-yaw));
+        m.rotate(Axis.YP.rotationDegrees(-yaw));
         OmikujiModel.draw(providers, m, lt, age, be.animResult, time);
 
         // 결과 공개 후 지붕 위에 운세 글자를 띄운다
         if (be.animResult >= 0 && age >= OmikujiBlockEntity.REVEAL_AT && age < OmikujiBlockEntity.SLIP_UNTIL) {
-            float pop = MathHelper.clamp((age - OmikujiBlockEntity.REVEAL_AT) / 8f, 0f, 1f);
+            float pop = Mth.clamp((age - OmikujiBlockEntity.REVEAL_AT) / 8f, 0f, 1f);
             float fade = age > OmikujiBlockEntity.SLIP_UNTIL - 10 ? (OmikujiBlockEntity.SLIP_UNTIL - age) / 10f : 1f;
             float s = pop * pop * Math.max(0f, fade);
-            if (s > 0.02f) drawLabel(be, m, providers, s, time, yaw);
+            if (s > 0.02f) drawLabel(be, m, providers, s, time, yaw, camera);
         }
-        m.pop();
+        m.popPose();
     }
 
-    private void drawLabel(OmikujiBlockEntity be, MatrixStack m, VertexConsumerProvider providers, float s, float time, float yaw) {
+    private void drawLabel(OmikujiBlockEntity be, PoseStack m, GeoBuffers providers, float s, float time, float yaw, CameraRenderState camera) {
         Fortunes.Fortune f = Fortunes.get(be.animResult);
-        Text name = Text.translatable("omikuji.newyearcountdown.fortune." + f.key()).formatted(f.color(), Formatting.BOLD);
-        Text msg = Text.translatable("omikuji.newyearcountdown.msg." + f.key());
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Component name = Component.translatable("omikuji.newyearcountdown.fortune." + f.key()).withStyle(f.color(), ChatFormatting.BOLD);
+        Component msg = Component.translatable("omikuji.newyearcountdown.msg." + f.key());
 
-        m.push();
-        m.translate(0, 4.7 + 0.06 * MathHelper.sin(time * 0.1f), 0);
-        m.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(yaw));      // 구조물 회전을 되돌리고
-        m.multiply(mc.gameRenderer.getCamera().getRotation());        // 카메라를 향하게 한다
-        m.scale(-1f, -1f, 1f);
+        m.pushPose();
+        m.translate(0, 4.7 + 0.06 * Mth.sin(time * 0.1f), 0);
+        m.rotate(Axis.YP.rotationDegrees(yaw));      // 구조물 회전을 되돌리고
+        m.rotate(camera.orientation);        // 카메라를 향하게 한다
+        m.scale(1f, -1f, 1f);
 
-        m.push();
+        m.pushPose();
         float big = 0.075f * s;
         m.scale(big, big, big);
-        textRenderer.draw(name, -textRenderer.getWidth(name) / 2f, -4f, 0xFFFFFFFF, true, m.peek().getPositionMatrix(),
-                providers, TextRenderer.TextLayerType.NORMAL, 0x40000000, 0xF000F0);
-        m.pop();
+        providers.text(m, name, -textRenderer.width(name) / 2f, -4f, 0xFFFFFFFF, true, 0x40000000, 0xF000F0);
+        m.popPose();
 
-        m.push();
+        m.pushPose();
         float small = 0.026f * s;
         m.translate(0, 0.5f * s, 0);
         m.scale(small, small, small);
-        textRenderer.draw(msg, -textRenderer.getWidth(msg) / 2f, 0f, 0xFFFFFFFF, true, m.peek().getPositionMatrix(),
-                providers, TextRenderer.TextLayerType.NORMAL, 0x40000000, 0xF000F0);
-        m.pop();
-        m.pop();
+        providers.text(m, msg, -textRenderer.width(msg) / 2f, 0f, 0xFFFFFFFF, true, 0x40000000, 0xF000F0);
+        m.popPose();
+        m.popPose();
     }
 }

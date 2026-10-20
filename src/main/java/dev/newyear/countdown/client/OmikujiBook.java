@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * 이 서버(월드)에서 내가 뽑은 오미쿠지. 서버가 저장하고 접속할 때 내려 주므로 기기·서버·맵이 달라도 섞이지 않는다.
  * 시간순 목록의 0번이 "첫 뽑기(메인)", 나머지는 "추가 뽑기"다.
- * 화면 순서(display)는 첫 뽑기 → 가장 최근 추가 뽑기 → … 순이다.
+ * 보관함은 시간순으로 보여 준다: 맨 왼쪽이 첫 뽑기, 오른쪽으로 넘길수록 나중에 뽑은 것.
  */
 public final class OmikujiBook {
     public static final class Entry {
@@ -51,13 +51,13 @@ public final class OmikujiBook {
         return entries.get(0);
     }
 
-    /** 화면 순서: 0 = 첫 뽑기, 1.. = 최근 추가 뽑기부터. */
+    /** 보관함 i 번째(시간순, 0 = 첫 뽑기). */
     public static Entry display(int i) {
-        return entries.get(i == 0 ? 0 : entries.size() - i);
+        return entries.get(i);
     }
 
-    /** 화면 순서 i 의 추가 뽑기 회차(첫 뽑기면 0). */
+    /** 보관함 i 번째의 추가 뽑기 회차(첫 뽑기면 0). */
     public static int extraNo(int i) {
-        return i == 0 ? 0 : entries.size() - i;
+        return i;
     }
 }

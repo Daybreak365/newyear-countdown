@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "minecraft:polished_andesite",
+    "minecraft:polished_andesite",
+    "minecraft:red_dye"
+  ],
+  "result": {
+    "id": "newyearcountdown:curling_stone_red",
+    "count": 2
+  }
+}

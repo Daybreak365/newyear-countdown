@@ -1,38 +1,31 @@
 package dev.newyear.countdown.gacha;
 
-import dev.newyear.countdown.NewYearCountdown;
-import net.minecraft.block.AbstractBlock;
-import net.minecraft.block.Block;
-import net.minecraft.block.MapColor;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.block.piston.PistonBehavior;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Item;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.sound.BlockSoundGroup;
-import net.minecraft.util.Identifier;
+import dev.newyear.countdown.ModReg;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.level.material.PushReaction;
 
 public final class GachaBlocks {
-    public static final Block GACHA_MACHINE = Registry.register(Registries.BLOCK,
-            Identifier.of(NewYearCountdown.MOD_ID, "gacha_machine"),
-            new GachaMachineBlock(AbstractBlock.Settings.create()
-                    .mapColor(MapColor.RED)
+    public static final Block GACHA_MACHINE = ModReg.block("gacha_machine", GachaMachineBlock::new, BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.COLOR_RED)
                     .strength(2.0f, 6.0f)
-                    .sounds(BlockSoundGroup.METAL)
-                    .nonOpaque()
-                    .luminance(s -> 7)
-                    .pistonBehavior(PistonBehavior.BLOCK)));
+                    .sound(SoundType.METAL)
+                    .noOcclusion()
+                    .lightLevel(s -> 7)
+                    .pushReaction(PushReaction.IMMOVEABLE));
 
-    public static final BlockEntityType<GachaMachineBlockEntity> GACHA_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE,
-            Identifier.of(NewYearCountdown.MOD_ID, "gacha_machine"),
-            BlockEntityType.Builder.create(GachaMachineBlockEntity::new, GACHA_MACHINE).build(null));
+    public static final BlockEntityType<GachaMachineBlockEntity> GACHA_BE = ModReg.blockEntity("gacha_machine", GachaMachineBlockEntity::new, GACHA_MACHINE);
 
-    public static final Item GACHA_ITEM = Registry.register(Registries.ITEM,
-            Identifier.of(NewYearCountdown.MOD_ID, "gacha_machine"), new GachaMachineItem(GACHA_MACHINE, new Item.Settings()));
+    public static final Item GACHA_ITEM = ModReg.item("gacha_machine", p -> new GachaMachineItem(GACHA_MACHINE, p), new Item.Properties());
 
-    public static final Item CAPSULE = Registry.register(Registries.ITEM,
-            Identifier.of(NewYearCountdown.MOD_ID, "capsule"), new CapsuleItem(new Item.Settings().maxCount(64)));
+    public static final Item CAPSULE = ModReg.item("capsule", CapsuleItem::new, new Item.Properties().stacksTo(64));
 
     private GachaBlocks() {}
 
