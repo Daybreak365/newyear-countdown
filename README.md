@@ -85,3 +85,10 @@ Minecraft 26.3, Fabric Loader 0.19.5 이상, Java 25 필요. 서버·클라이�
 
 ## 크리에이티브 탭
 - 보신각, 오미쿠지, 소원 연등, 가챠 머신, 캡슐, 기념품은 모두 전용 탭 **"새해 카운트다운"** 에 모여 있습니다.
+
+## AI 소원 엔진 — 새벽별
+플레이어가 자연어로 소원을 빌면 AI(OpenAI Responses API, 기본 모델 `gpt-6.1-terra`)가 들어줄지 판단·협상하고, 필요하면 서버 안에서 실행되는 새 게임 로직(샌드박스 스크립트)을 직접 작성·검증·실행합니다. 퀘스트·능력·대화는 전용 UI(대화 화면 `G`, HUD `J` 접기)로 보이고, 세계의 사건은 기억으로 남아 이후 소원과 자율 사건에 이어집니다.
+- 서버 환경 변수 `OPENAI_API_KEY` 필요 (키는 서버에서만 사용). 설정: `config/newyearcountdown-ai.json`.
+- 소원 빌기: `G` 대화 화면, `/wish <소원>`, 또는 소원 연등.
+- 관리자: `/wishai status|disable|enable|scripts|script|approve|wishes|memory|autonomy|selftest|...`
+- 자세한 구조·스크립트 API·설정·시험 결과·제약: [docs/WISH_AI.md](docs/WISH_AI.md)

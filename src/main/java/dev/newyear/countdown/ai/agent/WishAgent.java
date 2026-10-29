@@ -298,6 +298,9 @@ public final class WishAgent {
             if (p != null && !autonomous && error.kind != ApiException.Kind.CANCELLED) {
                 eng.ui().spiritLine(p, w == null ? null : w.id, friendly(error), "sad");
             }
+            if (w != null && (w.state == Wish.State.ANALYZING || w.state == Wish.State.CREATED)) {
+                eng.wishes().transition(w, Wish.State.NEGOTIATING, "AI error: " + error.kind + " (player may retry)");
+            }
             if (w != null && w.failures >= 4 && !w.state.terminal() && w.scriptIds.isEmpty()) {
                 eng.wishes().transition(w, Wish.State.FAILED, "AI unavailable: " + error.kind);
             }

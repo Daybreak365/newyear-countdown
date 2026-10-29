@@ -30,7 +30,7 @@ public final class AiHud {
 
         drawCinematic(g, f, sw, sh);
         // 오른쪽 한 줄: 바닐라 토스트(오른쪽 위)와 겹치지 않도록 화면 1/3 지점부터 알림 → 능력·과제 순으로 쌓는다
-        int top = Math.max(100, Math.round(sh * 0.34f));
+        int top = Math.max(110, Math.round(sh * 0.38f));
         int y = drawToasts(g, f, sw, sh, top);
         if (!screenOpen) drawSidebar(g, f, sw, sh, y);
         if (!screenOpen) drawIndicators(g, f, sw, sh);
