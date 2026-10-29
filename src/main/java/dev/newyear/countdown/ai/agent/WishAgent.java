@@ -191,7 +191,7 @@ public final class WishAgent {
     }
 
     /** 한도·예산·킬 스위치 확인. 막아야 하면 플레이어에게 보여 줄 문장을 돌려준다. */
-    private String gate(TurnRequest req, ServerPlayer p) {
+    public String gate(TurnRequest req, ServerPlayer p) {
         AiConfig cfg = AiConfig.get();
         if (!eng.aiEnabled()) return "지금은 별빛이 잠들어 있구나. (AI 기능이 꺼져 있습니다)";
         if (!AiConfig.hasApiKey()) return "하늘과 이어지는 실이 끊어져 있구나… (서버에 OPENAI_API_KEY 가 설정되지 않았습니다)";

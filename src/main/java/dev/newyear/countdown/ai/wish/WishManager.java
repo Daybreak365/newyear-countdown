@@ -56,6 +56,14 @@ public final class WishManager {
         if (text.isEmpty()) return;
         String uuid = p.getUUID().toString();
         AiState.PlayerProfile prof = eng.state().profile(uuid, p.getGameProfile().name());
+        // 한도·예산·키 확인을 소원 기록을 만들기 전에 한다 (거절된 소원이 '분석 중'으로 남지 않게)
+        if (eng.agent().busy(prof.openWishId == null ? "" : prof.openWishId) == false) {
+            String refusal = eng.agent().gate(TurnRequest.player(null, p.getUUID(), text), p);
+            if (refusal != null) {
+                eng.ui().spiritLine(p, prof.openWishId, refusal, "sad");
+                return;
+            }
+        }
 
         Wish w = null;
         if (wishId != null && !wishId.isEmpty()) {

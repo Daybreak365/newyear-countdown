@@ -50,6 +50,7 @@ public final class SelfTest {
     private final List<JsonObject> sinkA = new CopyOnWriteArrayList<>();
     private final List<String> testScripts = new ArrayList<>();
     private HttpServer mock;
+    private int savedCooldown;
     private final List<JsonObject> mockRequests = new CopyOnWriteArrayList<>();
 
     private interface Step {
@@ -169,7 +170,10 @@ public final class SelfTest {
     private void start() {
         log("§6[WishAI] 자가 진단 시작 — 가짜 플레이어 2명, 로컬 가짜 AI 서버 사용");
         ServerLevel level = eng.server().overworld();
-        level.getChunk(0, 0);
+        // 26.x 에는 항상 로드된 스폰 청크가 없으므로 시험 구역을 잠시 강제 로드한다
+        for (int cx = -1; cx <= 1; cx++) for (int cz = -1; cz <= 1; cz++) level.setChunkForced(cx, cz, true);
+        savedCooldown = AiConfig.get().perPlayerCooldownSeconds;
+        AiConfig.get().perPlayerCooldownSeconds = 0;
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0);
         a = FakePlayer.get(level, new GameProfile(UUID.nameUUIDFromBytes("wishai-test-a".getBytes()), "WishTestA"));
         b = FakePlayer.get(level, new GameProfile(UUID.nameUUIDFromBytes("wishai-test-b".getBytes()), "WishTestB"));
@@ -428,21 +432,6 @@ public final class SelfTest {
             }
             if (o.has("type") && "function_call_output".equals(o.get("type").getAsString())) outputs.add(o.get("output").getAsString());
         }
-        if (lastUser.contains("빵")) {
-            if (outputs.isEmpty()) return call("run_script", obj("code", "owner.give('bread', 1); fx.burst(owner.pos(), 'stars');", "name", "bread"));
-            return finalJson("옜다, 따끈한 빵이다. 맛있게 먹거라.", false);
-        }
-        if (lastUser.contains("폭죽")) {
-            if (outputs.isEmpty()) return call("activate_script", obj("name", "jump-fireworks", "lasting", true, "ability_label", "폭죽 도약",
-                    "code", "on('jump', (e) => { fx.fireworkz(e.player.pos()); }, {player: owner});"));
-            if (outputs.size() == 1) return call("activate_script", obj("name", "jump-fireworks", "lasting", true, "ability_label", "폭죽 도약",
-                    "code", "ui.status(owner, 'fw', {label: '폭죽 도약'});\non('jump', (e) => { fx.firework(offset(e.player.pos(), 0, 1, 0), {colors: ['gold'], shape: 'star'}); }, {player: owner});"));
-            return finalJson("좋다. 이제 네가 뛰어오를 때마다 하늘이 축하해 줄 것이다.", false);
-        }
-        if (lastUser.contains("다이아몬드")) {
-            if (outputs.isEmpty()) return call("propose_contract", obj("terms", "친구에게 아무 물건이나 하나 선물하라", "reward", "다이아몬드 16개"));
-            return finalJson("계약서를 내밀겠다. 받아들이겠느냐?", true);
-        }
         if (lastUser.contains("CONTRACT ACCEPTED")) {
             if (outputs.isEmpty()) {
                 JsonObject args = obj("title", "나눔의 계약", "reward", "다이아몬드 16개");
@@ -457,6 +446,21 @@ public final class SelfTest {
                         "code", "on('item_give', (e) => { if (e.from.is(owner)) quests.get('" + qid + "').add('gift'); });\non('quest_completed', (e) => { if (e.quest.id === '" + qid + "') { owner.give('diamond', 16); wish.complete('선물하고 다이아몬드 16개'); } });"));
             }
             return finalJson("계약이 성립되었다.", false);
+        }
+        if (lastUser.contains("빵")) {
+            if (outputs.isEmpty()) return call("run_script", obj("code", "owner.give('bread', 1); fx.burst(owner.pos(), 'stars');", "name", "bread"));
+            return finalJson("옜다, 따끈한 빵이다. 맛있게 먹거라.", false);
+        }
+        if (lastUser.contains("폭죽")) {
+            if (outputs.isEmpty()) return call("activate_script", obj("name", "jump-fireworks", "lasting", true, "ability_label", "폭죽 도약",
+                    "code", "on('jump', (e) => { fx.fireworkz(e.player.pos()); }, {player: owner});"));
+            if (outputs.size() == 1) return call("activate_script", obj("name", "jump-fireworks", "lasting", true, "ability_label", "폭죽 도약",
+                    "code", "ui.status(owner, 'fw', {label: '폭죽 도약'});\non('jump', (e) => { fx.firework(offset(e.player.pos(), 0, 1, 0), {colors: ['gold'], shape: 'star'}); }, {player: owner});"));
+            return finalJson("좋다. 이제 네가 뛰어오를 때마다 하늘이 축하해 줄 것이다.", false);
+        }
+        if (lastUser.contains("다이아몬드")) {
+            if (outputs.isEmpty()) return call("propose_contract", obj("terms", "친구에게 아무 물건이나 하나 선물하라", "reward", "다이아몬드 16개"));
+            return finalJson("계약서를 내밀겠다. 받아들이겠느냐?", true);
         }
         return finalJson("음… 무슨 말인지 모르겠구나.", false);
     }
@@ -529,6 +533,9 @@ public final class SelfTest {
 
     private void finishAll() {
         if (mock != null) mock.stop(0);
+        AiConfig.get().perPlayerCooldownSeconds = savedCooldown;
+        ServerLevel level = eng.server().overworld();
+        for (int cx = -1; cx <= 1; cx++) for (int cz = -1; cz <= 1; cz++) level.setChunkForced(cx, cz, false);
         AiConfig.testApiBase = null;
         AiConfig.testApiKey = null;
         String ua = a.getUUID().toString(), ub = b.getUUID().toString();
