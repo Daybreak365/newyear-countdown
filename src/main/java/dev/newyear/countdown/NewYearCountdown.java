@@ -50,6 +50,10 @@ public class NewYearCountdown implements ModInitializer {
         BellPackets.register();
         dev.newyear.countdown.sebae.Sebae.init();
         dev.newyear.countdown.curling.Curling.init();
+        // AI 소원 엔진 (새벽별): 설정·이벤트·명령 등록. 엔진 자체는 서버 시작 시 만들어진다.
+        dev.newyear.countdown.ai.AiConfig.load();
+        dev.newyear.countdown.ai.GameEvents.register();
+        dev.newyear.countdown.ai.AiCommands.register();
 
         // 접속 시 현재 상태 동기화, 퇴장 시 인증 해제
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->

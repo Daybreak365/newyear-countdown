@@ -70,6 +70,8 @@ public final class WishLaunch {
         WishData.get(sw.getServer()).add(player.getUUID(), text, System.currentTimeMillis());
         WishPackets.sendBook(player, sw.getServer());
         player.sendOverlayMessage(Component.translatable("wish.newyearcountdown.launched"));
+        // AI 소원 엔진이 켜져 있으면 연등이 떠오른 뒤 새벽별이 이 소원에 응답한다
+        dev.newyear.countdown.ai.GameEvents.onLanternWish(player, text);
     }
 
     /** 플레이어가 PlayerEntity 로만 주어질 때를 위한 보조 (사용 안 함 시 제거 가능). */
