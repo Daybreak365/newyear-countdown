@@ -45,3 +45,18 @@ java {
 tasks.withType(JavaCompile).configureEach {
     it.options.compilerArgs += ['-Xmaxerrs', '5000']
 }
+
+// 스크립트 런타임·AI 계층 단위 테스트 (Minecraft 없이 실행)
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "failed"
+        exceptionFormat "full"
+    }
+}

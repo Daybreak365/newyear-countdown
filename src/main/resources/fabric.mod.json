@@ -3,7 +3,7 @@
   "id": "newyearcountdown",
   "version": "${version}",
   "name": "New Year Countdown",
-  "description": "새해 카운트다운 HUD와 보신각 타종 모드.",
+  "description": "새해 카운트다운 HUD와 보신각 타종 모드. AI 소원 엔진(새벽별) 포함.",
   "authors": [
     "새벽"
   ],
@@ -33,6 +33,10 @@
     {
       "config": "newyearcountdown.mixins.json",
       "environment": "client"
+    },
+    {
+      "config": "newyearcountdown.ai.mixins.json",
+      "environment": "*"
     }
   ]
 }
