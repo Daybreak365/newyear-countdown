@@ -336,10 +336,13 @@ public final class WishAgent {
             }
             for (String sid : w.scriptIds) {
                 var r = eng.state().scripts.get(sid);
-                if (r != null && (r.state.live() || r.state == dev.newyear.countdown.ai.script.ScriptRecord.State.PENDING_APPROVAL) && r.durationTicks != 2400) activeWork = true;
+                // 지속 능력(lasting)은 소원이 이뤄진 결과물이므로 '진행 중인 일'로 보지 않는다
+                if (r != null && !r.lasting && (r.state.live() || r.state == dev.newyear.countdown.ai.script.ScriptRecord.State.PENDING_APPROVAL) && r.durationTicks != 2400) activeWork = true;
             }
             String wid = w.id;
-            boolean waitingUi = eng.ui().pending().values().stream().anyMatch(x -> wid.equals(x.wishId));
+            // AI 가 직접 띄운 UI(답이 다음 턴으로 오는 것)만 '대화 대기'로 본다. 스크립트가 띄운 UI 는 진행 중인 일이다.
+            boolean waitingUi = eng.ui().pending().values().stream().anyMatch(x -> wid.equals(x.wishId) && (x.responder == null || x.responder.scriptId() == null));
+            if (eng.ui().pending().values().stream().anyMatch(x -> wid.equals(x.wishId) && x.responder != null && x.responder.scriptId() != null)) activeWork = true;
             if (expect || waitingUi) {
                 if (w.state == Wish.State.ANALYZING || w.state == Wish.State.CREATED) eng.wishes().transition(w, Wish.State.NEGOTIATING, "awaiting player reply");
             } else if (activeWork) {

@@ -27,6 +27,8 @@ public final class AutonomyManager {
     private long nextPeriodic = -1;
     private long nextMaintenance = 20 * 60 * 3;
     private final Map<String, Long> summarizing = new HashMap<>();
+    /** "플레이어|기억" — 지금 그 장소 안에 있는 플레이어 (들어오는 순간에만 반응). */
+    private final java.util.Set<String> insidePlace = new java.util.HashSet<>();
 
     public AutonomyManager(WishEngine eng) {
         this.eng = eng;
@@ -50,10 +52,22 @@ public final class AutonomyManager {
         return true;
     }
 
+    /** 관리자 명령: 쿨다운을 무시하고 자율 판단을 한 번 연다. */
+    public boolean forceTrigger(ServerPlayer p, String description) {
+        if (!eng.aiAvailable()) return false;
+        startTurn(p, description);
+        return true;
+    }
+
     /** 자율 판단 턴을 연다. */
     private void trigger(ServerPlayer p, String description) {
         String uuid = p == null ? null : p.getUUID().toString();
         if (!allowed(uuid)) return;
+        startTurn(p, description);
+    }
+
+    private void startTurn(ServerPlayer p, String description) {
+        String uuid = p == null ? null : p.getUUID().toString();
         long now = System.currentTimeMillis();
         AiState st = eng.state();
         st.lastAutonomyGlobal = now;
@@ -146,28 +160,42 @@ public final class AutonomyManager {
                 + ". If an old story (creature, place, unresolved quest, legend) could naturally continue now, start a small event. Otherwise stay silent.");
     }
 
-    /** 기억 속 장소(좌표가 있는 기억)를 플레이어가 다시 찾으면 후속 이벤트 기회. */
+    /**
+     * 기억 속 장소(좌표가 있는 기억)에 플레이어가 "다시" 들어오면 후속 이벤트 기회.
+     * 방금 만든 기억(10분 이내)이나 계속 서 있는 경우에는 반응하지 않고, 바깥에서 안으로 들어오는 순간에만 본다.
+     */
     private void checkPlaces() {
         List<MemoryRecord> places = new ArrayList<>();
-        for (MemoryRecord r : eng.memory().all()) if (r.pos != null && !r.archived && r.importance >= 4) places.add(r);
-        if (places.isEmpty()) return;
         long now = System.currentTimeMillis();
+        for (MemoryRecord r : eng.memory().all()) {
+            if (r.pos != null && !r.archived && r.importance >= 4) places.add(r);
+        }
+        if (places.isEmpty()) return;
         for (ServerPlayer p : eng.server().getPlayerList().getPlayers()) {
             String dim = McUtil.dimId(p.level());
             for (MemoryRecord r : places) {
-                if (r.dimension != null && !r.dimension.equals(dim)) continue;
-                if (r.scope == MemoryRecord.Scope.PLAYER && !p.getUUID().toString().equals(r.owner)) continue;
-                double dx = p.getX() - r.pos[0], dz = p.getZ() - r.pos[2], dy = p.getY() - r.pos[1];
-                if (dx * dx + dz * dz > 144 || Math.abs(dy) > 16) continue;
+                String key = p.getUUID() + "|" + r.id;
+                boolean in = (r.dimension == null || r.dimension.equals(dim))
+                        && (r.scope == MemoryRecord.Scope.WORLD || p.getUUID().toString().equals(r.owner))
+                        && sq(p.getX() - r.pos[0]) + sq(p.getZ() - r.pos[2]) <= 144 && Math.abs(p.getY() - r.pos[1]) <= 16;
+                boolean was = insidePlace.contains(key);
+                if (in == was) continue;
+                if (!in) { insidePlace.remove(key); continue; }
+                insidePlace.add(key);
+                if (now - r.created < AiConfig.get().autonomyPlaceMinAgeMinutes * 60_000L) continue;   // 방금 생긴 장소
                 AiState.PlayerProfile prof = eng.state().profile(p.getUUID().toString(), p.getGameProfile().name());
                 Long last = prof.placeVisits.get(r.id);
-                if (last != null && now - last < 3 * 3_600_000L) continue;
+                if (last != null && now - last < AiConfig.get().autonomyPlaceCooldownHours * 3_600_000L) continue;
                 prof.placeVisits.put(r.id, now);
                 trigger(p, p.getGameProfile().name() + " came back to a remembered place: \"" + r.text + "\" (memory " + r.id + "). "
                         + "Consider a follow-up event connected to that memory.");
                 return;
             }
         }
+    }
+
+    private static double sq(double d) {
+        return d * d;
     }
 
     /** 기억이 많이 쌓인 플레이어의 오래된 기억을 요약해 접는다. */

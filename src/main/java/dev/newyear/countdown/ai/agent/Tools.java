@@ -557,7 +557,7 @@ public final class Tools {
                     JsonObject res = activate(ctx, r, args, false);
                     // 리스너·타이머가 없으면 바로 끝낸다
                     var inst = ctx.eng.scripts().instance(r.id);
-                    if (inst != null && inst.listenerCount() == 0 && inst.activeTimers() == 0 && inst.rec.behaviours.isEmpty()) {
+                    if (inst != null && inst.listenerCount() == 0 && inst.activeTimers() == 0 && inst.rec.behaviours.isEmpty() && !ctx.eng.ui().hasPendingForScript(r.id)) {
                         ctx.eng.scripts().stop(r.id, ScriptRecord.State.STOPPED, "one-shot finished", false);
                     }
                     return res;

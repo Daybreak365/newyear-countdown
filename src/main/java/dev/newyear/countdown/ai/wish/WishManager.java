@@ -68,9 +68,14 @@ public final class WishManager {
         Wish w = null;
         if (wishId != null && !wishId.isEmpty()) {
             Wish c = eng.state().wishes.get(wishId);
-            if (c != null && uuid.equals(c.player) && !c.state.terminal()) w = c;
+            if (c != null && uuid.equals(c.player) && c.state.conversational()) w = c;
         }
-        if (w == null && !"lantern".equals(origin)) w = openWishOf(p);
+        // 대화 중인 소원만 이어 간다. 진행 중(퀘스트·승인 대기)인 소원이 있어도 새 말은 새 소원으로 시작한다
+        // (진행 중인 소원과 퀘스트는 컨텍스트로 AI 에게 함께 전달된다).
+        if (w == null && !"lantern".equals(origin)) {
+            Wish open = openWishOf(p);
+            if (open != null && open.state.conversational()) w = open;
+        }
         boolean fresh = w == null;
         if (fresh) {
             w = new Wish();
@@ -186,8 +191,18 @@ public final class WishManager {
         m.ownerName = w.playerName;
         m.wishId = w.id;
         String sum = w.summary != null && !w.summary.isEmpty() ? w.summary : w.outcome;
-        m.text = (w.playerName == null ? "세계" : w.playerName) + "의 소원 \"" + clip(w.text, 60) + "\" → " + stateKo(w.state)
-                + (sum == null || sum.isEmpty() ? "" : ": " + clip(sum, 240));
+        if ("autonomous".equals(w.origin)) {
+            // 자율 사건은 소원이 아니다: 아무 일도 없었으면 기록하지 않는다
+            if (w.conversation.isEmpty() && w.scriptIds.isEmpty() && w.questIds.isEmpty()) {
+                compactConversation(w);
+                return;
+            }
+            m.kind = "event";
+            m.text = "새벽별이 스스로 일으킨 일" + (w.playerName == null ? "" : " (" + w.playerName + " 곁에서)") + ": " + clip(sum == null ? "" : sum, 260);
+        } else {
+            m.text = (w.playerName == null ? "세계" : w.playerName) + "의 소원 \"" + clip(w.text, 60) + "\" → " + stateKo(w.state)
+                    + (sum == null || sum.isEmpty() ? "" : ": " + clip(sum, 240));
+        }
         m.importance = w.state == Wish.State.COMPLETED ? 6 : w.state == Wish.State.CANCELLED ? 3 : 5;
         for (String mid : w.memoryIds) if (!m.links.contains(mid) && m.links.size() < 4) m.links.add(mid);
         eng.memory().add(m, System.currentTimeMillis());
@@ -223,6 +238,35 @@ public final class WishManager {
         }
         w.conversationSummary = sb.toString().strip();
         w.conversation = new ArrayList<>(w.conversation.subList(cut, w.conversation.size()));
+    }
+
+    /**
+     * 진행 중(ACTIVE)인 소원의 보조 스크립트·퀘스트가 모두 끝났으면 소원도 마무리한다.
+     * (지속 능력 스크립트는 소원의 결과물이라 계속 돌아도 소원은 끝난 것으로 본다.)
+     */
+    public void checkWorkDone(String wishId) {
+        Wish w = wishId == null ? null : eng.state().wishes.get(wishId);
+        if (w == null || w.state != Wish.State.ACTIVE) return;
+        if (eng.agent().busy(w.id)) return;
+        for (String sid : w.scriptIds) {
+            var r = eng.state().scripts.get(sid);
+            if (r != null && !r.lasting && (r.state.live() || r.state == dev.newyear.countdown.ai.script.ScriptRecord.State.PENDING_APPROVAL)) return;
+        }
+        boolean anyCompleted = false, anyFailed = false;
+        for (String qid : w.questIds) {
+            Quest q = eng.state().quests.get(qid);
+            if (q == null) continue;
+            if (q.state == Quest.State.ACTIVE) return;
+            if (q.state == Quest.State.COMPLETED) anyCompleted = true;
+            if (q.state == Quest.State.FAILED) anyFailed = true;
+        }
+        for (UiService.Pending pd : eng.ui().pending().values()) if (w.id.equals(pd.wishId)) return;
+        if (anyFailed && !anyCompleted) {
+            w.outcome = w.outcome == null || w.outcome.isEmpty() ? "과제를 이루지 못했다" : w.outcome;
+            transition(w, Wish.State.FAILED, "quest failed");
+        } else {
+            transition(w, Wish.State.COMPLETED, w.summary == null || w.summary.isEmpty() ? "work finished" : w.summary);
+        }
     }
 
     public void completeFromScript(String wishId, String summary) {

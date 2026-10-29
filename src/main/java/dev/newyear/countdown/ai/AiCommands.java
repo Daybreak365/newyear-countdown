@@ -179,6 +179,16 @@ public final class AiCommands {
                             say(c, "기억 " + n + "개를 지웠습니다.");
                             return 1;
                         }))))
+                .then(Commands.literal("autonomy").then(Commands.argument("player", StringArgumentType.word())
+                        .then(Commands.argument("situation", StringArgumentType.greedyString()).executes(c -> {
+                            WishEngine e = eng(c);
+                            if (e == null) return 0;
+                            ServerPlayer p = e.playerByName(StringArgumentType.getString(c, "player"));
+                            if (p == null) { c.getSource().sendFailure(Component.literal("그 플레이어는 접속해 있지 않습니다")); return 0; }
+                            boolean ok = e.autonomy().forceTrigger(p, "[admin-requested] " + StringArgumentType.getString(c, "situation"));
+                            say(c, ok ? "자율 판단을 요청했습니다." : "AI 를 쓸 수 없습니다 (꺼짐/키 없음).");
+                            return ok ? 1 : 0;
+                        }))))
                 .then(Commands.literal("run").then(Commands.argument("code", StringArgumentType.greedyString()).executes(AiCommands::runCode)))
                 .then(Commands.literal("validate").then(Commands.argument("code", StringArgumentType.greedyString()).executes(AiCommands::validateCode)))
                 .then(Commands.literal("selftest").executes(c -> {
@@ -401,7 +411,7 @@ public final class AiCommands {
         var inst = e.scripts().instance(r.id);
         if (res.log() != null) for (String l : res.log()) say(c, "§7> " + l);
         if (!res.ok()) { c.getSource().sendFailure(Component.literal(res.error())); return 0; }
-        if (inst != null && inst.listenerCount() == 0 && inst.activeTimers() == 0) e.scripts().stop(r.id, ScriptRecord.State.STOPPED, "admin one-shot done", false);
+        if (inst != null && inst.listenerCount() == 0 && inst.activeTimers() == 0 && !e.ui().hasPendingForScript(r.id)) e.scripts().stop(r.id, ScriptRecord.State.STOPPED, "admin one-shot done", false);
         say(c, "§a실행됨 " + r.id);
         return 1;
     }

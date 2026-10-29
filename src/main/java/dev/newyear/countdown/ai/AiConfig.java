@@ -116,6 +116,10 @@ public final class AiConfig {
     public int autonomyMaxActiveEvents = 4;
     /** 자율 이벤트가 블록을 바꿀 수 있는지. */
     public boolean autonomyMayModifyWorld = false;
+    /** 기억 속 장소가 이 시간(분)보다 오래되어야 "다시 찾아온" 것으로 본다. */
+    public int autonomyPlaceMinAgeMinutes = 10;
+    /** 같은 장소로 다시 반응하기까지의 간격 (시간). */
+    public int autonomyPlaceCooldownHours = 3;
     /** 오랜만의 접속으로 보는 기준 (시간). */
     public int autonomyAbsenceHours = 6;
 

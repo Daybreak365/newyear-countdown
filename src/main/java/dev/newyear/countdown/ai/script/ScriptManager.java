@@ -123,7 +123,9 @@ public final class ScriptManager {
             live.remove(rec.id);
             indexDirty = true;
             rec.lastError = e.describe();
-            cleanup(rec, inst, true);
+            // 복구 실패는 세계에 남은 결과물(엔티티·블록)을 지우지 않는다 — 다시 시작할 수 있게
+            if (!restored) cleanup(rec, inst, true);
+            else eng.ui().cancelInteractionsOfScript(rec.id);
             rec.state = ScriptRecord.State.FAULTED;
             rec.stateReason = "startup error";
             return new Activation(false, e.describe(), new ArrayList<>(inst.in.log));
@@ -131,7 +133,7 @@ public final class ScriptManager {
             live.remove(rec.id);
             indexDirty = true;
             NewYearCountdown.LOGGER.warn("[WishAI] script {} crashed during startup", rec.id, e);
-            cleanup(rec, inst, true);
+            if (!restored) cleanup(rec, inst, true);
             rec.state = ScriptRecord.State.FAULTED;
             rec.lastError = "internal error: " + e.getClass().getSimpleName();
             return new Activation(false, rec.lastError, List.of());
@@ -178,6 +180,7 @@ public final class ScriptManager {
         rec.stateReason = reason == null ? "" : reason;
         cleanup(rec, inst, rollbackAllBlocks);
         NewYearCountdown.LOGGER.info("[WishAI] script {} ({}) -> {}: {}", rec.id, rec.name, end, reason);
+        if (rec.wishId != null) eng.wishes().checkWorkDone(rec.wishId);
         return true;
     }
 
@@ -409,7 +412,17 @@ public final class ScriptManager {
                     ? Arrays.asList(timedOut ? -1.0 : (double) index, timedOut ? null : value, pr)
                     : Arrays.asList(timedOut ? null : value, pr);
             invoke(inst, fn, args, "ui callback");
+            stopIfIdleOneShot(inst);
         });
+    }
+
+    /** run_script 로 만든 일회성 스크립트가 더 기다릴 것(리스너·타이머·행동·UI)이 없으면 끝낸다. */
+    public void stopIfIdleOneShot(ScriptInstance inst) {
+        ScriptRecord r = inst.rec;
+        if (!r.keepEntitiesDefault || r.lasting || !r.state.live()) return;
+        if (inst.listenerCount() > 0 || inst.activeTimers() > 0 || !r.behaviours.isEmpty() || !r.timers.isEmpty()) return;
+        if (eng.ui().hasPendingForScript(r.id)) return;
+        requestStop(r.id, "one-shot finished");
     }
 
     public UiService.Responder consentResponder(String scriptId, Callable fn) {
@@ -465,6 +478,7 @@ public final class ScriptManager {
                 if (!inst.rec.state.live()) break;
             }
             inst.timers.removeIf(t -> t.cancelled);
+            if (inst.timers.isEmpty()) stopIfIdleOneShot(inst);
             if (!inst.rec.timers.isEmpty()) {
                 for (ScriptRecord.NamedTimer nt : new ArrayList<>(inst.rec.timers)) {
                     if (nt.fireTick > now) continue;

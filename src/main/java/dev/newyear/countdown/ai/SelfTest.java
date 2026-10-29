@@ -292,6 +292,27 @@ public final class SelfTest {
                     res.ok() ? "j=" + (again == null ? null : again.state.get("j")) : res.error());
         });
 
+        // 7b. 주인이 접속해 있지 않을 때의 복구 → 접속하면 재개
+        then(1, () -> {
+            ScriptRecord r = script("offline-owner", "state.k ??= 0; state.k++; ui.status(owner, 'x', {label: '대기 능력'}); const here = owner.pos();", a, -1);
+            r.lasting = true;
+            var res = activate(r);
+            ScriptInstance inst = eng.scripts().instance(r.id);
+            eng.scripts().saveState(inst);
+            eng.scripts().live().remove(r.id);
+            r.state = ScriptRecord.State.ACTIVE;
+            eng.removeTestPlayer(a.getUUID());          // 주인이 오프라인인 상태를 흉내
+            var restored = eng.scripts().activate(r, true);
+            boolean failedOffline = !restored.ok() && restored.error() != null && restored.error().contains("is offline");
+            // 엔진이 서버 시작 시 하는 처리와 같게 대기 상태로 둔다
+            if (failedOffline) { r.state = ScriptRecord.State.SUSPENDED; r.waitingForOwner = true; }
+            eng.addTestPlayer(a);
+            eng.onJoin(a);
+            ScriptInstance again = eng.scripts().instance(r.id);
+            check("restore while owner offline waits, resumes on join", res.ok() && failedOffline && again != null && Interpreter.toNumber(again.state.get("k")) == 2.0,
+                    "first=" + res.ok() + " offlineFail=" + failedOffline + " resumed=" + (again != null));
+        });
+
         // 8. UI 상호작용 검증 (다른 플레이어, 중복)
         String[] uiScript = new String[1];
         then(1, () -> {

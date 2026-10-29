@@ -393,6 +393,12 @@ public final class UiService {
         }
     }
 
+    /** 이 스크립트의 응답을 기다리는 UI 가 남아 있는지 (한 번 실행 스크립트를 일찍 끝내지 않기 위해). */
+    public boolean hasPendingForScript(String scriptId) {
+        for (Pending pd : pending.values()) if (pd.responder != null && scriptId.equals(pd.responder.scriptId())) return true;
+        return false;
+    }
+
     public void cancelInteractionsOfScript(String scriptId) {
         for (Pending pd : new ArrayList<>(pending.values())) {
             if (pd.responder != null && scriptId.equals(pd.responder.scriptId())) {

@@ -35,6 +35,8 @@ public class NewYearCountdownClient implements ClientModInitializer {
     private static KeyMapping openSettings;
     private static KeyMapping openWishes;
     private static KeyMapping sebae;
+    private static KeyMapping wishChat;
+    private static KeyMapping wishHud;
 
     @Override
     public void onInitializeClient() {
@@ -50,12 +52,17 @@ public class NewYearCountdownClient implements ClientModInitializer {
             OmikujiHud.sync();
             WishBook.clear();
             SebaePose.clear();
+            dev.newyear.countdown.client.ai.AiClientState.clear();
         });
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> DebugAccess.sendAuth());
 
         HudElementRegistry.addLast(ModReg.id("countdown"), CountdownHud::render);
         HudElementRegistry.addLast(ModReg.id("bell"), BellSession::renderHud);
         HudElementRegistry.addLast(ModReg.id("omikuji"), OmikujiHud::render);
+        // AI 소원 엔진 (새벽별): 선언형 UI 연산 수신 + HUD
+        HudElementRegistry.addLast(ModReg.id("wish_ai"), dev.newyear.countdown.client.ai.AiHud::render);
+        ClientPlayNetworking.registerGlobalReceiver(dev.newyear.countdown.ai.net.AiPackets.UiS2C.ID,
+                (payload, context) -> dev.newyear.countdown.client.ai.AiClientState.apply(payload.json()));
 
         // 오미쿠지 칸: 한 번이라도 받았다면 인벤토리 옆에 나타난다
         ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
@@ -137,6 +144,12 @@ public class NewYearCountdownClient implements ClientModInitializer {
         sebae = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.newyearcountdown.sebae", InputConstants.Type.KEYBOARD, InputConstants.KEY_B,
                 CATEGORY));
+        wishChat = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.newyearcountdown.wish_chat", InputConstants.Type.KEYBOARD, InputConstants.KEY_G,
+                CATEGORY));
+        wishHud = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.newyearcountdown.wish_hud", InputConstants.Type.KEYBOARD, InputConstants.KEY_J,
+                CATEGORY));
         ClientPlayNetworking.registerGlobalReceiver(dev.newyear.countdown.sebae.Sebae.StateS2C.ID, (payload, context) -> {
             if (payload.bowing()) SebaePose.start(payload.player());
             else SebaePose.stop(payload.player());
@@ -151,6 +164,13 @@ public class NewYearCountdownClient implements ClientModInitializer {
                     ClientPlayNetworking.send(new dev.newyear.countdown.sebae.Sebae.StartC2S());
                 }
             }
+            while (wishChat.consumeClick()) {
+                if (client.gui.screen() == null && client.player != null) client.gui.setScreen(new dev.newyear.countdown.client.ai.WishChatScreen());
+            }
+            while (wishHud.consumeClick()) {
+                dev.newyear.countdown.client.ai.AiHud.collapsed = !dev.newyear.countdown.client.ai.AiHud.collapsed;
+            }
+            dev.newyear.countdown.client.ai.AiHud.openKeyName = wishChat.getTranslatedKeyMessage().getString();
             while (openSettings.consumeClick()) {
                 client.gui.setScreen(new SettingsScreen(client.gui.screen()));
             }

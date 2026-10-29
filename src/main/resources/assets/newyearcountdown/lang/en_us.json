@@ -388,5 +388,7 @@
   "curling.newyearcountdown.reset": "Stones collected, new game",
   "curling.newyearcountdown.board.end": "End %s / %s",
   "curling.newyearcountdown.board.turn": "%s to throw",
-  "curling.newyearcountdown.sweep": "Hurry hard!"
+  "curling.newyearcountdown.sweep": "Hurry hard!",
+  "key.newyearcountdown.wish_chat": "Wish dialogue (Dawn Star)",
+  "key.newyearcountdown.wish_hud": "Collapse/expand wish HUD"
 }

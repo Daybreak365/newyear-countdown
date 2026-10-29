@@ -104,6 +104,7 @@ public final class QuestService {
         JsObject ev = new JsObject().put("quest", new QuestRef(q.id, false, null)).put("player", owner).put("reason", q.resultNote);
         eng.scripts().emit(end == Quest.State.COMPLETED ? "quest_completed" : "quest_failed", ev, ScriptManager.Ctx.NONE);
         eng.autonomy().onQuestFinished(q, end);
+        if (q.wishId != null) eng.wishes().checkWorkDone(q.wishId);
     }
 
     private ArrayList<ServerPlayer> players(Quest q) {

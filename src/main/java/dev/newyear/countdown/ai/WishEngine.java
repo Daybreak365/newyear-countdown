@@ -103,16 +103,23 @@ public final class WishEngine {
             for (ScriptRecord r : state.scripts.values()) if (r.state == ScriptRecord.State.ACTIVE) r.state = ScriptRecord.State.SUSPENDED;
             return;
         }
-        int ok = 0, bad = 0;
+        int ok = 0, bad = 0, waiting = 0;
         for (ScriptRecord r : new ArrayList<>(state.scripts.values())) {
             if (r.state != ScriptRecord.State.ACTIVE) continue;
             if (scripts.activate(r, true).ok()) ok++;
-            else {
+            else if (r.lastError != null && r.lastError.contains("is offline") && r.owner != null) {
+                // 주인이 아직 접속하지 않아 초기화 코드가 실패: 기다렸다가 접속하면 다시 시작한다
+                r.state = ScriptRecord.State.SUSPENDED;
+                r.stateReason = "waiting for owner to join";
+                r.waitingForOwner = true;
+                r.errors = 0;
+                waiting++;
+            } else {
                 bad++;
                 NewYearCountdown.LOGGER.warn("[WishAI] could not restore script {}: {}", r.id, r.lastError);
             }
         }
-        if (ok + bad > 0) NewYearCountdown.LOGGER.info("[WishAI] restored {} scripts ({} failed)", ok, bad);
+        if (ok + bad + waiting > 0) NewYearCountdown.LOGGER.info("[WishAI] restored {} scripts ({} waiting for their owner, {} failed)", ok, waiting, bad);
     }
 
     // ---------------------------------------------------------------- 접근자
@@ -245,6 +252,16 @@ public final class WishEngine {
         long prevSeen = prof.lastSeen;
         prof.lastJoin = System.currentTimeMillis();
         prof.lastSeen = prof.lastJoin;
+        // 주인을 기다리던 스크립트 재시작
+        if (!state.killSwitch) {
+            String uuid = p.getUUID().toString();
+            for (ScriptRecord r : new ArrayList<>(state.scripts.values())) {
+                if (!r.waitingForOwner || !uuid.equals(r.owner) || r.state != ScriptRecord.State.SUSPENDED) continue;
+                r.waitingForOwner = false;
+                var res = scripts.activate(r, true);
+                NewYearCountdown.LOGGER.info("[WishAI] resumed script {} for {}: {}", r.id, p.getGameProfile().name(), res.ok() ? "ok" : res.error());
+            }
+        }
         ui.syncPlayer(p);
         autonomy.onJoin(p, prevSeen);
     }

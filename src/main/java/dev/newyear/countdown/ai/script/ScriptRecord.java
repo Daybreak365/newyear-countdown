@@ -111,4 +111,6 @@ public final class ScriptRecord {
     public boolean lasting;
     /** run_script 처럼 결과물을 남기는 것이 목적인 스크립트: 소환한 엔티티를 기본으로 남긴다. */
     public boolean keepEntitiesDefault;
+    /** 복구 중 주인이 접속해 있지 않아 실패: 주인이 들어오면 다시 시작한다. */
+    public boolean waitingForOwner;
 }

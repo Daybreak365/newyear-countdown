@@ -110,6 +110,13 @@ public final class ScriptApi {
         throw in.error("Expected a player (got " + Interpreter.typeName(v) + ")");
     }
 
+    /** HUD 상태처럼 오프라인이어도 저장해 두었다가 접속 시 보여 줄 수 있는 대상: UUID 와 이름. */
+    private static String[] playerIdent(Interpreter in, Object v) {
+        if (v instanceof PlayerRef r) return new String[]{r.id.toString(), r.name};
+        ServerPlayer p = playerArg(in, v);
+        return new String[]{p.getUUID().toString(), p.getGameProfile().name()};
+    }
+
     /** 플레이어 하나 또는 'all' (전체). 오프라인이면 빈 목록. */
     private static List<ServerPlayer> targets(Interpreter in, Object v) {
         List<ServerPlayer> out = new ArrayList<>();
@@ -856,14 +863,14 @@ public final class ScriptApi {
             }
             return true;
         });
-        o.fn("status", "(player, id, opts{label, desc, kind:'ability'|'curse'|'blessing'|'info', seconds (0=until script ends), counter:'3/7', icon:{pixels:['..#..',…], palette:{'#':'#ffcc00'}}}) show/update a HUD status line", (in, s, a) -> {
-            ServerPlayer p = playerArg(in, Args.get(a, 0));
+        o.fn("status", "(player, id, opts{label, desc, kind:'ability'|'curse'|'blessing'|'info', seconds (0=until script ends), counter:'3/7', icon:{pixels:['..#..',…], palette:{'#':'#ffcc00'}}}) show/update a HUD status line (works while the player is offline; shown when they join)", (in, s, a) -> {
+            String[] who = playerIdent(in, Args.get(a, 0));
             String id = MemoryText.limit(Args.str(in, a, 1, "status id"), 40);
             JsObject opts = Args.opts(a, 2);
-            if (inst.dry) { inst.effect("HUD status '" + Args.optStr(opts, "label", id) + "' for " + p.getGameProfile().name()); return true; }
+            if (inst.dry) { inst.effect("HUD status '" + Args.optStr(opts, "label", id) + "' for " + who[1]); return true; }
             StatusEntry st = new StatusEntry();
             st.id = inst.rec.id + ":" + id;
-            st.owner = p.getUUID().toString();
+            st.owner = who[0];
             st.label = MemoryText.limit(Args.optStr(opts, "label", id), 40);
             st.description = MemoryText.limit(Args.optStr(opts, "desc", ""), 120);
             st.kind = Args.optStr(opts, "kind", "ability");
@@ -883,13 +890,13 @@ public final class ScriptApi {
             return true;
         });
         o.fn("timer", "(player, id, seconds, label) HUD countdown (display only; use after() for logic)", (in, s, a) -> {
-            ServerPlayer p = playerArg(in, Args.get(a, 0));
+            String[] who = playerIdent(in, Args.get(a, 0));
             String id = MemoryText.limit(Args.str(in, a, 1, "timer id"), 40);
             double secs = Math.max(1, Math.min(7200, Args.num(in, a, 2, "seconds")));
             if (inst.dry) { inst.effect("HUD timer " + secs + "s"); return true; }
             StatusEntry st = new StatusEntry();
             st.id = inst.rec.id + ":" + id;
-            st.owner = p.getUUID().toString();
+            st.owner = who[0];
             st.label = MemoryText.limit(Args.str(a, 3, "남은 시간"), 40);
             st.kind = "timer";
             st.scriptId = inst.rec.id;

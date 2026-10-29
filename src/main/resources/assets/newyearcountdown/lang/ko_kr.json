@@ -388,5 +388,7 @@
   "curling.newyearcountdown.reset": "스톤을 거두고 새 경기를 시작합니다",
   "curling.newyearcountdown.board.end": "%s / %s 엔드",
   "curling.newyearcountdown.board.turn": "%s 차례",
-  "curling.newyearcountdown.sweep": "쓸어라! 쓸어라!"
+  "curling.newyearcountdown.sweep": "쓸어라! 쓸어라!",
+  "key.newyearcountdown.wish_chat": "소원 대화 (새벽별)",
+  "key.newyearcountdown.wish_hud": "소원 HUD 접기/펼치기"
 }
