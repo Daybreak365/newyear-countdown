@@ -390,5 +390,12 @@
   "curling.newyearcountdown.board.turn": "%s 차례",
   "curling.newyearcountdown.sweep": "쓸어라! 쓸어라!",
   "key.newyearcountdown.wish_chat": "소원 대화 (새벽별)",
-  "key.newyearcountdown.wish_hud": "소원 HUD 접기/펼치기"
+  "key.newyearcountdown.wish_hud": "소원 HUD 접기/펼치기",
+  "key.newyearcountdown.wish_admin": "새벽별 관리 화면 (관리자)",
+  "key.category.newyearcountdown.abilities": "새벽별 능력",
+  "key.newyearcountdown.ability_1": "능력 슬롯 1",
+  "key.newyearcountdown.ability_2": "능력 슬롯 2",
+  "key.newyearcountdown.ability_3": "능력 슬롯 3",
+  "key.newyearcountdown.ability_4": "능력 슬롯 4",
+  "gui.newyearcountdown.ability_unbound": "조작 설정에서 능력 슬롯 %s의 키 지정"
 }

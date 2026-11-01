@@ -26,10 +26,18 @@ public final class QuestRef implements Values.HostObject {
         this.dryQuest = dryQuest;
     }
 
-    private Quest quest() {
-        if (dry) return dryQuest;
+    public static QuestRef view(ScriptInstance inst, Quest quest) {
+        Quest snapshot = inst.questSnapshot(quest);
+        return inst.dry ? new QuestRef(quest.id, true, snapshot) : new QuestRef(quest.id, false, null);
+    }
+
+    private Quest quest(Interpreter in) {
+        ScriptInstance inst = ScriptInstance.of(in);
+        if (inst.dry && inst.dryQuests.containsKey(id)) return inst.dryQuests.get(id);
+        if (dry) return inst.questSnapshot(dryQuest);
         WishEngine e = WishEngine.get();
-        return e == null ? null : e.state().quests.get(id);
+        Quest q = e == null ? null : e.state().quests.get(id);
+        return q == null ? null : inst.questSnapshot(q);
     }
 
     @Override
@@ -47,7 +55,7 @@ public final class QuestRef implements Values.HostObject {
         switch (name) {
             case "id": return id;
             case "$ref": return "quest:" + id;
-            case "title": { Quest q = quest(); return q == null ? "" : q.title; }
+            case "title": { Quest q = quest(in); return q == null ? "" : q.title; }
             default: break;
         }
         Values.Callable m = METHODS.get(name);
@@ -80,7 +88,7 @@ public final class QuestRef implements Values.HostObject {
     }
 
     private static Quest need(Interpreter in, Object s) {
-        Quest q = self(in, s).quest();
+        Quest q = self(in, s).quest(in);
         if (q == null) throw in.error("quest no longer exists");
         return q;
     }
@@ -90,10 +98,12 @@ public final class QuestRef implements Values.HostObject {
         Quest q = need(in, s);
         Quest.Objective o = q.objective(oid);
         if (o == null) throw in.error("quest has no objective '" + oid + "'. Objectives: " + q.objectives.stream().map(x -> x.id).toList());
-        if (r.dry) {
+        if (ScriptInstance.of(in).dry || r.dry) {
+            if (q.state != Quest.State.ACTIVE) return q.state == Quest.State.COMPLETED;
             ScriptInstance.of(in).effect("quest progress " + oid + (add ? " +" : " = ") + value);
             o.progress = Math.max(0, Math.min(o.target, add ? o.progress + value : value));
             o.done = o.progress >= o.target;
+            if (q.allRequiredDone()) q.state = Quest.State.COMPLETED;
             return q.allRequiredDone();
         }
         return WishEngine.get().quests().progress(q.id, oid, value, add);
@@ -117,18 +127,19 @@ public final class QuestRef implements Values.HostObject {
         def("state", "() → 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'CANCELLED'", (in, s, a) -> need(in, s).state.name());
         def("complete", "(note?) finish the quest successfully (give rewards yourself in the script)", (in, s, a) -> {
             QuestRef r = self(in, s);
-            if (r.dry) { ScriptInstance.of(in).effect("quest complete"); need(in, s).state = Quest.State.COMPLETED; return true; }
+            if (ScriptInstance.of(in).dry || r.dry) { ScriptInstance.of(in).effect("quest complete"); Quest q = need(in, s); if (q.state == Quest.State.ACTIVE) q.state = Quest.State.COMPLETED; return true; }
             WishEngine.get().quests().finish(r.id, Quest.State.COMPLETED, Args.str(a, 0, ""));
             return true;
         });
         def("fail", "(reason?)", (in, s, a) -> {
             QuestRef r = self(in, s);
-            if (r.dry) { ScriptInstance.of(in).effect("quest fail"); need(in, s).state = Quest.State.FAILED; return true; }
+            if (ScriptInstance.of(in).dry || r.dry) { ScriptInstance.of(in).effect("quest fail"); Quest q = need(in, s); if (q.state == Quest.State.ACTIVE) q.state = Quest.State.FAILED; return true; }
             WishEngine.get().quests().finish(r.id, Quest.State.FAILED, Args.str(a, 0, ""));
             return true;
         });
         def("remaining", "() → seconds left (-1 if no limit)", (in, s, a) -> {
             Quest q = need(in, s);
+            if (q.preparing) return q.preparedTimeLimitTicks <= 0 ? -1.0 : q.preparedTimeLimitTicks / 20.0;
             if (q.deadlineTick <= 0) return -1.0;
             long now = WishEngine.get() == null ? 0 : WishEngine.get().tick();
             return Math.max(0, (q.deadlineTick - now) / 20.0);

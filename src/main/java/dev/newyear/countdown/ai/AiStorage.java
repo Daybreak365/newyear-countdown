@@ -58,10 +58,15 @@ public final class AiStorage {
         return read("usage.json", UsageFile.class);
     }
 
-    /** 서버 스레드에서 문자열로 직렬화한 뒤 (상태가 바뀌지 않게), 쓰기는 호출자가 고른 스레드에서 한다. */
-    public record Snapshot(String state, String scripts, String memory, String usage) {}
+    /** 의미 검색 색인 (없으면 null — 기억에서 다시 만든다). */
+    public com.google.gson.JsonObject loadEmbeddings() {
+        return read("embeddings.json", com.google.gson.JsonObject.class);
+    }
 
-    public Snapshot snapshot(AiState state, List<MemoryRecord> memory, UsageFile usage) {
+    /** 서버 스레드에서 문자열로 직렬화한 뒤 (상태가 바뀌지 않게), 쓰기는 호출자가 고른 스레드에서 한다. */
+    public record Snapshot(String state, String scripts, String memory, String usage, String embeddings) {}
+
+    public Snapshot snapshot(AiState state, List<MemoryRecord> memory, UsageFile usage, com.google.gson.JsonObject embeddings) {
         var scripts = state.scripts;
         state.scripts = new java.util.LinkedHashMap<>();
         String st;
@@ -70,7 +75,8 @@ public final class AiStorage {
         } finally {
             state.scripts = scripts;
         }
-        return new Snapshot(st, GSON.toJson(new ArrayList<>(scripts.values())), GSON.toJson(memory), GSON.toJson(usage));
+        return new Snapshot(st, GSON.toJson(new ArrayList<>(scripts.values())), GSON.toJson(memory), GSON.toJson(usage),
+                embeddings == null ? null : embeddings.toString());
     }
 
     public synchronized void write(Snapshot s) {
@@ -80,6 +86,7 @@ public final class AiStorage {
             writeAtomic("scripts.json", s.scripts());
             writeAtomic("memory.json", s.memory());
             writeAtomic("usage.json", s.usage());
+            if (s.embeddings() != null) writeAtomic("embeddings.json", s.embeddings());
         } catch (IOException e) {
             NewYearCountdown.LOGGER.error("[WishAI] Failed to save AI data to {}", dir, e);
         }

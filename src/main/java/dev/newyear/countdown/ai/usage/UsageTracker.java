@@ -28,6 +28,11 @@ public final class UsageTracker {
         public Map<String, Long> turnsByPlayer = new HashMap<>();
         public Map<String, Double> costByPlayer = new HashMap<>();
         public Map<String, Long> errorsByKind = new HashMap<>();
+        /** 응답에 실린 실제 모델 이름별 비용·토큰 (가격표가 모델마다 다르므로). */
+        public Map<String, Double> costByModel = new HashMap<>();
+        public Map<String, Long> tokensByModel = new HashMap<>();
+        public long embeddingRequests;
+        public long embeddingTokens;
     }
 
     public static final class Snapshot {
@@ -70,6 +75,8 @@ public final class UsageTracker {
         if (d.turnsByPlayer == null) d.turnsByPlayer = new HashMap<>();
         if (d.costByPlayer == null) d.costByPlayer = new HashMap<>();
         if (d.errorsByKind == null) d.errorsByKind = new HashMap<>();
+        if (d.costByModel == null) d.costByModel = new HashMap<>();
+        if (d.tokensByModel == null) d.tokensByModel = new HashMap<>();
         return d;
     }
 
@@ -78,9 +85,22 @@ public final class UsageTracker {
         return (uncached * inPrice + u.cachedInput() * cachedPrice + u.output() * outPrice) / 1_000_000.0;
     }
 
+    /** [입력, 캐시 입력, 출력] 단가로 계산. */
+    public double cost(ApiResponse.Usage u, double[] price) {
+        return cost(u, price[0], price[1], price[2]);
+    }
+
     public synchronized void recordRequest(String player, ApiResponse.Usage u, double costUsd) {
+        recordRequest(player, u, costUsd, null);
+    }
+
+    public synchronized void recordRequest(String player, ApiResponse.Usage u, double costUsd, String model) {
         rollover();
         for (Day d : new Day[]{today, lifetime}) {
+            if (model != null && !model.isEmpty()) {
+                d.costByModel.merge(model, costUsd, Double::sum);
+                d.tokensByModel.merge(model, u.input() + u.output(), Long::sum);
+            }
             d.requests++;
             d.inputTokens += u.input();
             d.cachedTokens += u.cachedInput();
@@ -104,6 +124,20 @@ public final class UsageTracker {
         }
         recentLatency.addLast(new long[]{System.currentTimeMillis(), latencyMs, error ? 1 : 0});
         while (recentLatency.size() > 200) recentLatency.removeFirst();
+    }
+
+    /** 임베딩 요청 (기억 색인·검색 질의). 비용은 하루 예산에 함께 들어간다. */
+    public synchronized void recordEmbedding(long tokens, double costUsd, String model) {
+        rollover();
+        for (Day d : new Day[]{today, lifetime}) {
+            d.embeddingRequests++;
+            d.embeddingTokens += tokens;
+            d.costUsd += costUsd;
+            if (model != null) {
+                d.costByModel.merge(model, costUsd, Double::sum);
+                d.tokensByModel.merge(model, tokens, Long::sum);
+            }
+        }
     }
 
     public synchronized long turnsToday(String player) {

@@ -46,7 +46,48 @@ public final class ScriptValidator {
         public int timers;
         public long steps;
         public boolean approvalNeeded;
+        public boolean approximateBuild;
         public final List<String> approvalReasons = new ArrayList<>();
+        /** 모의 실행이 계획한 블록 변경 (위치·이전·이후). 승인 화면·월드 미리보기에 쓴다. */
+        public final List<ScriptRecord.BlockChange> planned = new ArrayList<>();
+
+        /** AI 에게 줄 블록 변경 요약: 개수, 범위, 블록 종류별 수, 바뀌는 기존 블록. */
+        public JsonObject blockSummary() {
+            JsonObject o = new JsonObject();
+            o.addProperty("count", planned.size());
+            if (planned.isEmpty()) return o;
+            int[] min = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE}, max = {Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
+            java.util.Map<String, Integer> by = new java.util.TreeMap<>(), replaces = new java.util.TreeMap<>();
+            int temp = 0;
+            for (ScriptRecord.BlockChange b : planned) {
+                min[0] = Math.min(min[0], b.x); min[1] = Math.min(min[1], b.y); min[2] = Math.min(min[2], b.z);
+                max[0] = Math.max(max[0], b.x); max[1] = Math.max(max[1], b.y); max[2] = Math.max(max[2], b.z);
+                by.merge(shortId(b.after), 1, Integer::sum);
+                String before = shortId(b.before);
+                if (!before.equals("air") && !before.equals("cave_air")) replaces.merge(before, 1, Integer::sum);
+                if (b.temporary) temp++;
+            }
+            o.addProperty("from", min[0] + "," + min[1] + "," + min[2]);
+            o.addProperty("to", max[0] + "," + max[1] + "," + max[2]);
+            o.addProperty("size", (max[0] - min[0] + 1) + "x" + (max[1] - min[1] + 1) + "x" + (max[2] - min[2] + 1));
+            JsonObject bj = new JsonObject();
+            by.forEach(bj::addProperty);
+            o.add("blocks", bj);
+            if (!replaces.isEmpty()) {
+                JsonObject rj = new JsonObject();
+                replaces.forEach(rj::addProperty);
+                o.add("replaces", rj);
+            }
+            if (temp > 0) o.addProperty("temporary", temp);
+            return o;
+        }
+
+        private static String shortId(String state) {
+            if (state == null) return "air";
+            int i = state.indexOf('[');
+            String id = i < 0 ? state : state.substring(0, i);
+            return id.startsWith("minecraft:") ? id.substring(10) : id;
+        }
 
         public JsonObject toJson() {
             JsonObject o = new JsonObject();
@@ -58,6 +99,7 @@ public final class ScriptValidator {
             o.add("subscribed_events", arr(new ArrayList<>(events)));
             o.addProperty("active_timers", timers);
             o.addProperty("steps_used", steps);
+            if (!planned.isEmpty()) o.add("block_preview", blockSummary());
             if (approvalNeeded) {
                 o.addProperty("requires_admin_approval", true);
                 o.add("approval_reasons", arr(approvalReasons));
@@ -103,6 +145,7 @@ public final class ScriptValidator {
         b.reset();
         try {
             inst.in.run(program);
+            RuntimeControls.validateReceiver(inst);
         } catch (ScriptError e) {
             r.errors.add("while running top-level code: " + e.describe());
         } catch (RuntimeException e) {
@@ -161,8 +204,15 @@ public final class ScriptValidator {
             }
         }
         r.timers = inst.activeTimers();
+        if (r.timers > 0 && simulateTicks <= 0) r.warnings.add("Timer callbacks were not simulated. Validation does not prove delayed/conditional work succeeds; provide simulate_ticks and prerequisite test_events.");
         r.effects.addAll(inst.effects);
         r.log.addAll(inst.in.log);
+        r.planned.addAll(inst.planned);
+        r.approximateBuild=inst.approximateBuild;
+        if (inst.blockedBuildCells > 0) r.errors.add("Construction has " + inst.blockedBuildCells
+                + " blocked cells; these were not silently accepted: " + String.join("; ", inst.blockedBuildReasons));
+        var heap = dev.newyear.countdown.ai.script.lang.HeapMeter.measure(inst.heapRoots(), cfg.scriptHeapMaxBytes, inst.in.globals);
+        if (heap.overCap()) r.errors.add("Script retained memory exceeds " + dev.newyear.countdown.ai.script.lang.HeapMeter.human(cfg.scriptHeapMaxBytes));
 
         // 영향 분석
         for (String api : r.apiCalls) {
@@ -171,7 +221,7 @@ public final class ScriptValidator {
                 r.approvalReasons.add("uses " + api);
             }
         }
-        long blocks = inst.effects.stream().filter(e -> e.startsWith("setBlock")).count();
+        long blocks = inst.planned.size();
         if (blocks > cfg.approvalBlockThreshold) {
             r.approvalNeeded = true;
             r.approvalReasons.add("places " + blocks + " blocks (threshold " + cfg.approvalBlockThreshold + ")");
@@ -224,6 +274,13 @@ public final class ScriptValidator {
             case "custom" -> { p.map.remove("player"); p.put("name", "test").put("data", null).put("source", "test"); }
             case "quest_completed", "quest_failed", "quest_progress" -> p.put("quest", null).put("objective", "o1").put("progress", 1.0).put("target", 1.0);
             case "ui_response" -> p.put("interaction", "test").put("value", "0");
+            case "before_damage" -> p.put("target",owner).put("amount",4.0).put("cause","magic").put("attacker",null);
+            case "before_death" -> p.put("target",owner).put("cause","fall").put("pos",here);
+            case "before_item_use" -> p.put("item",item).put("hand","main_hand");
+            case "before_attack" -> p.put("target",EntityRef.fake("minecraft:zombie",new double[]{0,64,0}));
+            case "before_block_break" -> p.put("block","minecraft:dirt").put("pos",here);
+            case "ability_input" -> p.put("action","test").put("pressed",true);
+            case "projectile_hit" -> p.put("id","p-test").put("owner",owner).put("pos",here).put("target",EntityRef.fake("minecraft:zombie",new double[]{0,64,0}));
             default -> { }
         }
         if (data != null) {

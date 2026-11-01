@@ -84,6 +84,11 @@ public final class Interpreter {
             return decl.name() == null ? "anonymous" : decl.name();
         }
 
+        /** 함수 선언 노드 (호스트 전용: 클로저 저장 키). */
+        public Func declaration() {
+            return decl;
+        }
+
         @Override
         public Object call(Interpreter in, Object self, List<Object> args) {
             return in.invokeScript(this, self, args);
@@ -91,6 +96,8 @@ public final class Interpreter {
     }
 
     public final Scope globals = new Scope(null);
+    /** 마지막으로 실행한 최상위 코드의 범위 (top-level let/const/function). 클로저 저장·복구의 기준점. */
+    public Scope topScope;
     public Budget budget = Budget.defaults();
     /** 호스트(게임 API)가 실행 맥락을 붙여 두는 자리. 스크립트에서는 보이지 않는다. */
     public Object hostContext;
@@ -123,6 +130,7 @@ public final class Interpreter {
     /** 프로그램 최상위 코드 실행. 예산 초기화는 호출하는 쪽에서 한다. */
     public void run(Program program) {
         Scope top = new Scope(globals);
+        topScope = top;
         try {
             execBlockBody(program.body(), top);
         } catch (ReturnSignal r) {

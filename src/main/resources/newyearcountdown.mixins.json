@@ -10,7 +10,8 @@
     "HumanoidModelMixin",
     "PlayerModelMixin",
     "AvatarRendererMixin",
-    "FirstPersonHandsMixin"
+    "FirstPersonHandsMixin",
+    "SpecialModelRenderersAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

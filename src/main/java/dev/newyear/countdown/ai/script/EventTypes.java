@@ -10,6 +10,13 @@ public final class EventTypes {
     public static final Map<String, String> ALL = new LinkedHashMap<>();
 
     static {
+        ALL.put("before_damage", "{target, player? (victim), attacker, amount, cause}; RETURN {cancel:true} or {amount:number 0..40}. Synchronous, scoped to owner/consent. No recursive interception.");
+        ALL.put("before_death", "{target, player?, cause, pos}; RETURN {cancel:true} to prevent this death (minimum 1 health). Runs before drops.");
+        ALL.put("before_item_use", "{player,item,hand}; RETURN {cancel:true} to consume this interaction instead of vanilla use.");
+        ALL.put("before_attack", "{player,target}; RETURN {cancel:true} to cancel the default melee action.");
+        ALL.put("before_block_break", "{player,block,pos}; RETURN {cancel:true} to cancel breaking before drops.");
+        ALL.put("ability_input", "{player,action,pressed}; registered client control pressed/released; filtered by script and player.");
+        ALL.put("projectile_hit", "{id,owner,target|null,pos}; script projectile collided with a block or entity.");
         ALL.put("player_join", "{player}");
         ALL.put("player_leave", "{player}");
         ALL.put("chat", "{player, message}");
@@ -41,5 +48,6 @@ public final class EventTypes {
         ALL.put("quest_progress", "{quest, objective, progress, target}");
         ALL.put("wish_state", "{wish, state}");
         ALL.put("ui_response", "{player, interaction, value} (any UI answer belonging to this script's wish)");
+        ALL.put("world_edit_done", "{id, kind, placed, unchanged, skipped, total, complete} a gradual change finished. unchanged cells already matched. complete means no skipped cells; placed alone need not equal total. Verify final blocks for construction");
     }
 }

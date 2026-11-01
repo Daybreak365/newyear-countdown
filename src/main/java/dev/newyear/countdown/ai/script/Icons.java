@@ -16,6 +16,7 @@ public final class Icons {
     private Icons() {}
 
     public static void apply(StatusEntry st, Values.JsObject icon) {
+        if (icon.get("texture") instanceof String tex) st.iconTexture = Textures.normalize(tex);
         if (!(icon.get("pixels") instanceof Values.JsArray rows)) return;
         List<String> out = new ArrayList<>();
         for (Object r : rows.list) {

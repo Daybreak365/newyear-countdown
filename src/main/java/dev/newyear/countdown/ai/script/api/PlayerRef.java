@@ -286,6 +286,13 @@ public final class PlayerRef implements Args.Positioned {
             online(in, s).giveExperiencePoints(pts);
             return true;
         });
+        def("takeXpLevels", "(levels) → boolean; atomically check and remove whole XP levels after consent", (in,s,a) -> {
+            ScriptInstance inst=ScriptInstance.of(in);PlayerRef r=self(in,s);
+            Policy.checkAffect(in,inst,r,"take experience from",true);
+            double raw=Args.num(in,a,0,"levels");if(raw<0||raw>100||raw!=Math.floor(raw))throw in.error("levels must be an integer 0..100");
+            if(inst.dry){inst.effect("take XP levels "+raw);return true;}
+            ServerPlayer p=online(in,s);if(p.experienceLevel<(int)raw)return false;p.giveExperienceLevels(-(int)raw);return true;
+        });
         def("teleport", "(pos) short-range safe teleport; only owner/consenting players", (in, s, a) -> {
             ScriptInstance inst = ScriptInstance.of(in);
             PlayerRef r = self(in, s);
@@ -305,7 +312,8 @@ public final class PlayerRef implements Args.Positioned {
             if (inst.dry) { inst.effect("push " + r.name); return true; }
             ServerPlayer p = online(in, s);
             p.push(vx, vy, vz);
-            p.needsSync = true;
+            // needsSync only reaches tracking players; syncVelocity includes the controlling client.
+            p.syncVelocity = true;
             return true;
         });
         def("msg", "(text, color?) chat message to this player only", (in, s, a) -> {

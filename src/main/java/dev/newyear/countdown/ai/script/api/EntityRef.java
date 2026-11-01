@@ -165,7 +165,124 @@ public final class EntityRef implements Args.Positioned {
         }
     }
 
+    // ---------------------------------------------------------------- AI 목표 (Goals)
+
+    /** 대상 인자 → 목표 대상 문자열. */
+    private static String goalTarget(Interpreter in, Object t, String what) {
+        if (t instanceof PlayerRef pr) return "player:" + pr.id;
+        if (t instanceof EntityRef er) return "entity:" + er.id;
+        if (t instanceof String s) {
+            if (s.equals("hostile") || s.equals("players")) return s;
+            return "type:" + McUtil.parseId(in, s, "entity type");
+        }
+        throw in.error(what + " target must be a Player, an Entity, an entity type like 'zombie', 'hostile' or 'players'");
+    }
+
+    private static Object addGoal(Interpreter in, Object s, ScriptRecord.GoalSpec spec, String what) {
+        ScriptInstance inst = ScriptInstance.of(in);
+        EntityRef r = self(in, s);
+        Policy.checkControl(in, inst, r);
+        if (!r.fake) {
+            Entity e = need(in, s);
+            if (!(e instanceof Mob)) throw in.error(r.type + " has no AI to give goals to");
+            Policy.checkRange(in, inst, new double[]{e.getX(), e.getY(), e.getZ()});
+        }
+        spec.entity = r.id.toString();
+        if (dry(in, r.type + " " + what)) return true;
+        return (double) WishEngine.get().scripts().addGoal(inst, r, spec);
+    }
+
+    private static ScriptRecord.GoalSpec spec(String kind, JsObject o, double speed, double radius) {
+        ScriptRecord.GoalSpec g = new ScriptRecord.GoalSpec();
+        g.kind = kind;
+        g.speed = Math.max(0.3, Math.min(2.0, Args.optNum(o, "speed", speed)));
+        g.radius = Math.max(1, Math.min(32, Args.optNum(o, "radius", Args.optNum(o, "distance", radius))));
+        g.priority = (int) Math.max(0, Math.min(9, Args.optNum(o, "priority", 1)));
+        return g;
+    }
+
     static {
+        def("guard", "(spot pos|Player|Entity, opts?{radius=8, speed=1.2, priority=1}) a real AI goal: stay near the spot (or bodyguard a player), attack hostile mobs that come within radius, then return. Mobs that can attack only (wolf, iron_golem, zombie…). Persists → goal id", (in, s, a) -> {
+            JsObject o = Args.opts(a, 1);
+            ScriptRecord.GoalSpec g = spec("guard", o, 1.2, 8);
+            Object t = Args.get(a, 0);
+            if (t instanceof PlayerRef || t instanceof EntityRef) g.target = goalTarget(in, t, "guard");
+            else g.anchor = Args.pos(in, t, "guard spot");
+            EntityRef r = self(in, s);
+            if (!r.fake && !(need(in, s) instanceof Mob m && dev.newyear.countdown.ai.script.Goals.canAttack(m))) throw in.error(r.type + " cannot attack, so it cannot guard (try wolf, iron_golem, fox…)");
+            return addGoal(in, s, g, "guards");
+        });
+        def("flee", "(from 'players'|'hostile'|entityType|Player|Entity, opts?{distance=8, speed=1.3}) run away from it when it comes close (persists) → goal id", (in, s, a) -> {
+            ScriptRecord.GoalSpec g = spec("flee", Args.opts(a, 1), 1.3, 8);
+            g.target = goalTarget(in, Args.get(a, 0), "flee");
+            g.priority = Math.min(g.priority, 1);
+            return addGoal(in, s, g, "flees");
+        });
+        def("attack", "(target 'hostile'|entityType|Entity|Player, opts?{radius=16, speed=1.2}) hunt and melee-attack (persists). Other players only with their consent → goal id", (in, s, a) -> {
+            ScriptRecord.GoalSpec g = spec("attack", Args.opts(a, 1), 1.2, 16);
+            g.target = goalTarget(in, Args.get(a, 0), "attack");
+            ScriptInstance inst = ScriptInstance.of(in);
+            if (!dev.newyear.countdown.ai.script.Goals.playerTargetAllowed(inst, g.target)) {
+                throw new dev.newyear.countdown.ai.script.lang.ScriptError(dev.newyear.countdown.ai.script.lang.ScriptError.Kind.PERMISSION,
+                        "Cannot make mobs attack other players without their consent (ui.consent first); 'players' (everyone) is never allowed", 0, 0);
+            }
+            EntityRef r = self(in, s);
+            if (!r.fake && !(need(in, s) instanceof Mob m && dev.newyear.countdown.ai.script.Goals.canAttack(m))) throw in.error(r.type + " cannot attack");
+            return addGoal(in, s, g, "attacks " + g.target);
+        });
+        def("wander", "(opts?{center, radius=8, speed=1}) roam around a center (default: where it is now) (persists) → goal id", (in, s, a) -> {
+            JsObject o = Args.opts(a, 0);
+            ScriptRecord.GoalSpec g = spec("wander", o, 1.0, 8);
+            g.anchor = o.get("center") != null && o.get("center") != UNDEFINED ? Args.pos(in, o.get("center"), "center") : self(in, s).position();
+            g.priority = (int) Math.max(0, Math.min(9, Args.optNum(o, "priority", 5)));
+            return addGoal(in, s, g, "wanders");
+        });
+        def("patrol", "([pos, pos, …] (2-16 points), opts?{speed=1}) walk a loop through the points (persists) → goal id", (in, s, a) -> {
+            if (!(Args.get(a, 0) instanceof Values.JsArray pts) || pts.list.size() < 2 || pts.list.size() > 16) throw in.error("patrol needs 2-16 points");
+            ScriptRecord.GoalSpec g = spec("patrol", Args.opts(a, 1), 1.0, 8);
+            ScriptInstance inst = ScriptInstance.of(in);
+            for (Object p : pts.list) {
+                double[] q = Args.pos(in, p, "patrol point");
+                Policy.checkRange(in, inst, q);
+                g.points.add(q);
+            }
+            g.priority = (int) Math.max(0, Math.min(9, Args.optNum(Args.opts(a, 1), "priority", 3)));
+            return addGoal(in, s, g, "patrols");
+        });
+        def("lookAtPlayers", "(range=8) keep looking at nearby players (persists) → goal id", (in, s, a) -> {
+            ScriptRecord.GoalSpec g = new ScriptRecord.GoalSpec();
+            g.kind = "look";
+            g.radius = Math.max(2, Math.min(32, Args.num(a, 0, 8)));
+            g.priority = 6;
+            return addGoal(in, s, g, "looks at players");
+        });
+        def("brain", "({canUse(me)→bool, start(me), tick(me), stop(me), every=10 ticks, priority=2}) write a NEW AI goal: while canUse returns true the mob runs it (start once, tick every 'every' ticks, stop when done). One brain per entity; survives restarts → goal id", (in, s, a) -> {
+            if (!(Args.get(a, 0) instanceof JsObject o)) throw in.error("brain needs {canUse, tick, ...}");
+            ScriptInstance inst = ScriptInstance.of(in);
+            EntityRef r = self(in, s);
+            ScriptInstance.Brain b = new ScriptInstance.Brain();
+            b.entity = r.id.toString();
+            b.canUse = o.get("canUse") instanceof Values.Callable c ? c : null;
+            b.tick = o.get("tick") instanceof Values.Callable c ? c : null;
+            b.start = o.get("start") instanceof Values.Callable c ? c : null;
+            b.stop = o.get("stop") instanceof Values.Callable c ? c : null;
+            if (b.tick == null && b.start == null) throw in.error("brain needs at least a tick(me) or start(me) function");
+            b.every = (int) Math.max(5, Math.min(200, Args.optNum(o, "every", 10)));
+            b.priority = (int) Math.max(0, Math.min(9, Args.optNum(o, "priority", 2)));
+            ScriptRecord.GoalSpec g = new ScriptRecord.GoalSpec();
+            g.kind = "script";
+            g.interval = b.every;
+            g.priority = b.priority;
+            if (!inst.dry) inst.brains.put(b.entity, b);
+            return addGoal(in, s, g, "gets a scripted brain");
+        });
+        def("clearGoals", "(goalId?) remove one AI goal (by id) or all goals this script gave this entity", (in, s, a) -> {
+            ScriptInstance inst = ScriptInstance.of(in);
+            EntityRef r = self(in, s);
+            if (dry(in, "clear goals of " + r.type)) return true;
+            WishEngine.get().scripts().clearGoals(inst, r, Args.present(a, 0) ? (int) Args.num(a, 0, -1) : -1);
+            return true;
+        });
         def("exists", "() → boolean (alive and loaded)", (in, s, a) -> {
             EntityRef r = self(in, s);
             if (r.fake) return true;
@@ -287,12 +404,22 @@ public final class EntityRef implements Args.Positioned {
             return true;
         });
         def("push", "(vx, vy, vz)", (in, s, a) -> {
+            ScriptInstance inst=ScriptInstance.of(in);EntityRef ref=self(in,s);Policy.checkControl(in,inst,ref);
+            if(!inst.dry&&ref.live()!=null)Policy.checkRange(in,inst,new double[]{ref.live().getX(),ref.live().getY(),ref.live().getZ()});
             if (dry(in, "push entity")) return true;
             Entity e = need(in, s);
             if (e instanceof Player) throw in.error("use player.push for players");
             e.push(Math.max(-3, Math.min(3, Args.num(a, 0, 0))), Math.max(-3, Math.min(3, Args.num(a, 1, 0))), Math.max(-3, Math.min(3, Args.num(a, 2, 0))));
             e.needsSync = true;
             return true;
+        });
+        def("damage", "(amount) 0..40 damage to a nearby living non-player entity; respects pet ownership", (in,s,a)-> {
+            ScriptInstance inst=ScriptInstance.of(in);EntityRef ref=self(in,s);Policy.checkControl(in,inst,ref);
+            double amount=Args.num(in,a,0,"damage");if(amount<0||amount>40)throw in.error("Damage must be 0..40");
+            if(dry(in,"damage entity "+amount))return true;
+            Entity entity=need(in,s);if(!(entity instanceof LivingEntity living)||entity instanceof Player)throw in.error("Expected a living non-player entity");
+            Policy.checkRange(in,inst,new double[]{entity.getX(),entity.getY(),entity.getZ()});
+            return living.hurtServer((net.minecraft.server.level.ServerLevel)entity.level(),entity.damageSources().magic(),(float)amount);
         });
         def("setAI", "(enabled) only entities this script spawned", (in, s, a) -> {
             ScriptInstance inst = ScriptInstance.of(in);

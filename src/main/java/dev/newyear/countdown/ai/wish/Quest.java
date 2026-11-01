@@ -30,6 +30,10 @@ public final class Quest {
     public String failure = "";
     public List<Objective> objectives = new ArrayList<>();
     public State state = State.ACTIVE;
+    /** Hidden until the condition tracker has finished starting successfully. Old saved quests default to visible. */
+    public boolean preparing;
+    public long preparedTimeLimitTicks;
+    public boolean preparedCompletion;
     public long created;
     /** 엔진 틱 기준 마감 (0 = 없음). */
     public long deadlineTick;
@@ -40,6 +44,25 @@ public final class Quest {
     public String resultNote = "";
     /** 마감 시 자동 실패 처리 여부. */
     public boolean failOnTimeout = true;
+
+    /** Independent simulation snapshot; objectives and participants must never alias live state. */
+    public Quest copy() {
+        Quest q = new Quest();
+        q.id = id; q.wishId = wishId; q.owner = owner; q.ownerName = ownerName;
+        q.participants = new ArrayList<>(participants);
+        q.title = title; q.description = description; q.conditions = conditions;
+        q.reward = reward; q.failure = failure; q.state = state; q.created = created;
+        q.deadlineTick = deadlineTick; q.startTick = startTick; q.priority = priority;
+        q.scriptId = scriptId; q.resultNote = resultNote; q.failOnTimeout = failOnTimeout;
+        q.preparing = preparing; q.preparedTimeLimitTicks = preparedTimeLimitTicks; q.preparedCompletion = preparedCompletion;
+        for (Objective o : objectives) {
+            Objective c = new Objective();
+            c.id = o.id; c.text = o.text; c.progress = o.progress; c.target = o.target;
+            c.done = o.done; c.optional = o.optional; c.hidden = o.hidden;
+            q.objectives.add(c);
+        }
+        return q;
+    }
 
     public Objective objective(String oid) {
         for (Objective o : objectives) if (o.id.equals(oid)) return o;

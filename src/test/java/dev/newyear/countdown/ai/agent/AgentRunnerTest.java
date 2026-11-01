@@ -46,6 +46,7 @@ class AgentRunnerTest {
     @AfterEach
     void stop() {
         if (server != null) server.stop(0);
+        dev.newyear.countdown.ai.AiConfig.clearSessionApiKey();
     }
 
     static String functionCall(String name, String args) {
@@ -60,9 +61,13 @@ class AgentRunnerTest {
     }
 
     private AgentRunner.Request request(int maxRounds) {
+        return request(maxRounds, "gpt-6.1-terra");
+    }
+
+    private AgentRunner.Request request(int maxRounds, String model) {
         JsonObject schema = JsonParser.parseString("{\"type\":\"object\",\"properties\":{\"say\":{\"type\":\"string\"}},\"required\":[\"say\"],\"additionalProperties\":false}").getAsJsonObject();
         JsonArray tools = JsonParser.parseString("[{\"type\":\"function\",\"name\":\"give\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}]").getAsJsonArray();
-        return new AgentRunner.Request("gpt-6.1-terra", "medium", "be nice", new ArrayList<>(List.of(AgentRunner.userMessage("빵 하나 줘"))),
+        return new AgentRunner.Request(model, "medium", "be nice", new ArrayList<>(List.of(AgentRunner.userMessage("빵 하나 줘"))),
                 tools, schema, "reply", maxRounds, 10, 2000, false, "k", "sid");
     }
 
@@ -70,6 +75,88 @@ class AgentRunnerTest {
         OpenAiClient c = new OpenAiClient(() -> new OpenAiClient.Settings(base, "sk-test", Duration.ofSeconds(5), 3));
         c.setSleeper(ms -> { });
         return c;
+    }
+
+    @Test
+    void unfinishedQuestMakesTheModelImplementBeforeItsFinalReply() throws Exception {
+        var pendingQuest = new java.util.concurrent.atomic.AtomicBoolean(true);
+        String base = start(n -> n == 1 ? new Reply(200, finalText("{\"say\":\"과제를 시작해라\"}"), null)
+                : n == 2 ? new Reply(200, functionCall("give", "{}"), null)
+                : new Reply(200, finalText("{\"say\":\"준비가 끝났다\"}"), null));
+        var result = new AgentRunner(client(base)).run(request(5), (name, args) -> {
+            pendingQuest.set(false); return "{\"tracker_ready\":true}";
+        }, null, null, null, () -> pendingQuest.get() ? "Implement the hidden quest condition tracker before replying." : "");
+        assertEquals(3, requests.size());
+        assertEquals("준비가 끝났다", result.json.get("say").getAsString());
+        assertTrue(requests.get(1).getAsJsonArray("input").toString().contains("condition tracker"));
+        assertEquals("auto", requests.get(1).get("tool_choice").getAsString());
+    }
+
+    @Test
+    void missingImplementationRetriesAreBounded() throws Exception {
+        String base = start(n -> new Reply(200, finalText("{\"say\":\"준비 중\"}"), null));
+        new AgentRunner(client(base)).run(request(5), (a, b) -> "{}", null, null, null, () -> "Tracker missing.");
+        assertEquals(3, requests.size());
+    }
+
+    @Test
+    void implementationRetryDoesNotBypassToolRoundLimit() throws Exception {
+        String base = start(n -> n == 1 ? new Reply(200, functionCall("give", "{}"), null)
+                : new Reply(200, finalText("{\"say\":\"아직 준비 중\"}"), null));
+        new AgentRunner(client(base)).run(request(1), (a, b) -> "{}", null, null, null, () -> "Tracker missing.");
+        assertEquals(2, requests.size());
+        assertEquals("none", requests.get(1).get("tool_choice").getAsString());
+    }
+
+    @Test
+    void temporaryKeyIsUsedOnlyInAuthorizationAndCanBeReplaced() throws Exception {
+        String base = start(n -> new Reply(200, finalText("{\"say\":\"ok\"}"), null));
+        var player = java.util.UUID.randomUUID();
+        var config = dev.newyear.countdown.ai.AiConfig.class;
+        String first = "sk-session-first-test-only", second = "sk-session-second-test-only";
+        OpenAiClient liveSettings = new OpenAiClient(() -> new OpenAiClient.Settings(base,
+                dev.newyear.countdown.ai.AiConfig.apiKey(), Duration.ofSeconds(5), 0));
+        dev.newyear.countdown.ai.AiConfig.setSessionApiKey(player, first);
+        new AgentRunner(liveSettings).run(request(1), (a, b) -> "{}", null, null, null);
+        dev.newyear.countdown.ai.AiConfig.setSessionApiKey(player, second);
+        new AgentRunner(liveSettings).run(request(1), (a, b) -> "{}", null, null, null);
+        assertEquals(List.of("Bearer " + first, "Bearer " + second), authHeaders);
+        for (JsonObject body : requests) {
+            assertFalse(body.toString().contains(first));
+            assertFalse(body.toString().contains(second));
+        }
+    }
+
+    @Test
+    void authenticationErrorsDoNotEchoCredentials() throws Exception {
+        String base = start(n -> new Reply(401, "{\"error\":{\"message\":\"Incorrect key sk-test\"}}", null));
+        ApiException error = assertThrows(ApiException.class, () -> new AgentRunner(client(base)).run(request(1), (a, b) -> "{}", null, null, null));
+        assertEquals(ApiException.Kind.AUTH, error.kind);
+        assertFalse(error.getMessage().contains("sk-test"));
+    }
+
+    @Test
+    void rejectedRequestRedactsKeyBeforeTruncatingErrorText() throws Exception {
+        String message = "x".repeat(296) + "sk-test";
+        String body = "{\"error\":{\"message\":" + new com.google.gson.JsonPrimitive(message) + "}}";
+        String base = start(n -> new Reply(400, body, null));
+        ApiException error = assertThrows(ApiException.class, () -> new AgentRunner(client(base)).run(request(1), (a, b) -> "{}", null, null, null));
+        assertFalse(error.getMessage().contains("sk-"));
+    }
+
+    @Test
+    void solModelIsSentThroughoutToolRoundTrip() throws Exception {
+        String base = start(n -> n == 1 ? new Reply(200, functionCall("give", "{\"item\":\"bread\"}"), null)
+                : new Reply(200, finalText("{\"say\":\"완료\"}"), null));
+        String model = new dev.newyear.countdown.ai.AiConfig().model;
+        assertEquals("gpt-6.1-sol", model);
+        var result = new AgentRunner(client(base)).run(request(3, model), (name, args) -> "{\"ok\":true}", null, null, null);
+        assertEquals("완료", result.json.get("say").getAsString());
+        assertEquals(2, requests.size());
+        for (JsonObject body : requests) {
+            assertEquals("gpt-6.1-sol", body.get("model").getAsString());
+            assertEquals("medium", body.getAsJsonObject("reasoning").get("effort").getAsString());
+        }
     }
 
     @Test

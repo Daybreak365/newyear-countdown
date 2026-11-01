@@ -71,7 +71,7 @@ public final class ScriptApi {
             "cancelTimer", "emit", "region", "removeRegion", "now", "tick", "random", "randomInt", "chance", "pick", "shuffle",
             "pos", "offset", "distance", "seconds", "minutes", "log");
     public static final List<String> GLOBAL_OBJECTS = List.of("world", "players", "entities", "fx", "ui", "quests", "memory",
-            "wish", "script", "ai", "state", "owner");
+            "wish", "script", "ai", "state", "owner", "textures", "items", "attributes", "snapshots", "content", "controls", "projectiles", "extensions", "payments", "construction");
 
     public static java.util.Set<String> globalNames() {
         java.util.Set<String> s = new java.util.HashSet<>(GLOBAL_FUNCTIONS);
@@ -242,10 +242,20 @@ public final class ScriptApi {
         define(in, buildFx(inst));
         define(in, buildUi(inst));
         define(in, buildQuests(inst));
+        define(in, RuntimePayments.api(inst));
+        define(in, RuntimeConstruction.api(inst));
         define(in, buildMemory(inst));
         define(in, buildWish(inst, wish));
         define(in, buildScript(inst));
         define(in, buildAi(inst));
+        define(in, buildTextures(inst));
+        define(in, RuntimeItems.api(inst));
+        define(in, RuntimeState.attributes(inst));
+        define(in, RuntimeState.snapshots(inst));
+        define(in, ContentLibrary.api(inst));
+        define(in, RuntimeControls.api(inst));
+        define(in, RuntimeProjectiles.api(inst));
+        define(in, dev.newyear.countdown.ai.extension.NativeExtensions.api(inst));
     }
 
     private static void define(Interpreter in, ApiObject o) {
@@ -320,20 +330,26 @@ public final class ScriptApi {
             ServerLevel l = server().overworld();
             return l.isThundering() ? "thunder" : l.isRaining() ? "rain" : "clear";
         });
-        w.fn("setTime", "('day'|'noon'|'night'|'midnight') may need admin approval", (in, s, a) -> {
+        w.fn("setTime", "('day'|'noon'|'night'|'midnight') change the time for EVERYONE — the sky can change only once every few minutes server-wide; all players are told whose wish it was", (in, s, a) -> {
             String t = Args.str(in, a, 0, "time");
             if (!List.of("day", "noon", "night", "midnight").contains(t)) throw in.error("setTime accepts day, noon, night, midnight");
             if (inst.dry) { inst.effect("set time " + t); return true; }
+            skyChange(inst, switch (t) { case "day" -> "아침"; case "noon" -> "한낮"; case "night" -> "밤"; default -> "한밤"; });
             runCommand("time set " + t);
             return true;
         });
-        w.fn("setWeather", "('clear'|'rain'|'thunder', seconds=300) may need admin approval", (in, s, a) -> {
+        w.fn("setWeather", "('clear'|'rain'|'thunder', seconds=300) change the weather for EVERYONE (same server-wide limit as setTime)", (in, s, a) -> {
             String t = Args.str(in, a, 0, "weather");
             if (!List.of("clear", "rain", "thunder").contains(t)) throw in.error("setWeather accepts clear, rain, thunder");
             int secs = (int) Math.max(10, Math.min(3600, Args.num(a, 1, 300)));
             if (inst.dry) { inst.effect("set weather " + t); return true; }
+            skyChange(inst, switch (t) { case "clear" -> "맑음"; case "rain" -> "비"; default -> "뇌우"; });
             runCommand("weather " + t + " " + secs + "s");
             return true;
+        });
+        w.fn("skyReady", "() → seconds until the sky (time/weather) may be changed again (0 = now)", (in, s, a) -> {
+            long left = WishEngine.get().state().lastSkyChange + AiConfig.get().skyChangeCooldownMinutes * 60_000L - System.currentTimeMillis();
+            return (double) Math.max(0, (left + 999) / 1000);
         });
         w.fn("block", "(pos, opts?{dimension}) → block id like 'minecraft:stone'", (in, s, a) -> {
             ServerLevel l = levelOf(inst, Args.opts(a, 1));
@@ -350,6 +366,19 @@ public final class ScriptApi {
             ServerLevel l = levelOf(inst, Args.opts(a, 1));
             BlockPos p = McUtil.blockPos(Args.pos(in, Args.get(a, 0), "position"));
             return l.isLoaded(p) && l.getBlockState(p).isAir();
+        });
+        w.fn("checkBlock", "(pos, block, opts?{dimension}) → {allowed,current,reason}. Read-only engine placement policy, including natural/replaceable terrain and protected builds. Use for construction preflight instead of requiring isAir everywhere. Check player/entity clearance and foundations separately", (in,s,a) -> {
+            ServerLevel l = levelOf(inst,Args.opts(a,2));
+            BlockPos p = McUtil.blockPos(Args.pos(in,Args.get(a,0),"position"));
+            BlockState target = McUtil.block(in,Args.str(in,a,1,"block"));
+            JsObject result = new JsObject().put("current",l.isLoaded(p) ? McUtil.blockString(l.getBlockState(p)) : "unloaded");
+            try {
+                Policy.checkBlock(in,inst,l,p,target,true);
+                return result.put("allowed",true).put("reason","");
+            } catch (ScriptError e) {
+                if (e.kind != ScriptError.Kind.PERMISSION) throw e;
+                return result.put("allowed",false).put("reason",e.getMessage());
+            }
         });
         w.fn("surface", "(x, z) → y of the first free block above ground", (in, s, a) -> {
             ServerLevel l = levelOf(inst, Args.opts(a, 2));
@@ -379,7 +408,8 @@ public final class ScriptApi {
             for (int k = 0; k < Math.min(max, found.size()); k++) out.list.add(Args.posObj(found.get(k)[0], found.get(k)[1], found.get(k)[2]));
             return out;
         });
-        w.fn("setBlock", "(pos, blockId, opts?{temporary:false, seconds}) place a block in EMPTY space only (air/water/grass) or replace one this script placed. temporary blocks revert when the script ends (or after 'seconds')", (in, s, a) ->
+        w.fn("setBlock", "(pos, blockId, opts?{temporary:false, seconds}) change one block: empty space, or NATURAL terrain (stone, dirt, sand, ores, natural trees, water…) — use 'air' to dig it out. "
+                + "Builds and the blocks touching them are protected. Every change is recorded and can be rolled back; temporary blocks revert when the script ends (or after 'seconds')", (in, s, a) ->
                 placeBlock(inst, in, Args.pos(in, Args.get(a, 0), "position"), Args.str(in, a, 1, "block id"), Args.opts(a, 2)));
         w.fn("fill", "(from, to, blockId, opts?) fill a box (max 512 blocks) — same rules as setBlock; occupied spots are skipped", (in, s, a) -> {
             double[] p1 = Args.pos(in, Args.get(a, 0), "from"), p2 = Args.pos(in, Args.get(a, 1), "to");
@@ -422,6 +452,66 @@ public final class ScriptApi {
             WishEngine.get().scripts().revertBlocks(inst.rec, false);
             return true;
         });
+        // ---- 큰 세계 변경 (점진적: 틱마다 조금씩, 끝나면 world_edit_done)
+        w.fn("terraform", "(center, radius<=24, {shape:'hill'|'crater'|'lake'|'flatten', height=4 (1-16), surface='grass_block', fill='dirt', liquid='water', temporary}) reshape the land smoothly (gradual) → edit id", (in, s, a) -> {
+            double[] c = Args.pos(in, Args.get(a, 0), "center");
+            int r = (int) Math.max(2, Math.min(24, Args.num(in, a, 1, "radius")));
+            JsObject o = Args.opts(a, 2);
+            String shape = Args.optStr(o, "shape", "hill");
+            if (!List.of("hill", "crater", "lake", "flatten").contains(shape)) throw in.error("terraform shape must be hill, crater, lake or flatten");
+            int h = (int) Math.max(1, Math.min(16, Args.optNum(o, "height", 4)));
+            ServerLevel l = levelOf(inst, o);
+            String surface = McUtil.blockString(McUtil.block(in, Args.optStr(o, "surface", "grass_block")));
+            String fill = McUtil.blockString(McUtil.block(in, Args.optStr(o, "fill", "dirt")));
+            String liquid = McUtil.blockString(McUtil.block(in, Args.optStr(o, "liquid", "water")));
+            return WorldEdits.submit(inst, in, l, WorldEdits.terraform(l, c, r, h, shape, surface, fill, liquid), o);
+        });
+        w.fn("sphere", "(center, radius<=16, blockId, opts?{hollow, temporary}) fill a ball (use 'air' to carve a cave out of natural rock) — gradual → edit id", (in, s, a) -> {
+            double[] c = Args.pos(in, Args.get(a, 0), "center");
+            double r = Math.max(1, Math.min(16, Args.num(in, a, 1, "radius")));
+            String st = McUtil.blockString(McUtil.block(in, Args.str(in, a, 2, "block id")));
+            JsObject o = Args.opts(a, 3);
+            ServerLevel l = levelOf(inst, o);
+            return WorldEdits.submit(inst, in, l, WorldEdits.sphere(McUtil.dimId(l), c, r, st, Args.optBool(o, "hollow", false)), o);
+        });
+        w.fn("box", "(from, to, blockId, opts?{hollow, temporary}) fill a box of any size up to the block limit (bridges, walls, platforms, tunnels with 'air') — gradual → edit id", (in, s, a) -> {
+            BlockPos p1 = McUtil.blockPos(Args.pos(in, Args.get(a, 0), "from")), p2 = McUtil.blockPos(Args.pos(in, Args.get(a, 1), "to"));
+            String st = McUtil.blockString(McUtil.block(in, Args.str(in, a, 2, "block id")));
+            JsObject o = Args.opts(a, 3);
+            ServerLevel l = levelOf(inst, o);
+            return WorldEdits.submit(inst, in, l, WorldEdits.box(McUtil.dimId(l), p1, p2, st, Args.optBool(o, "hollow", false)), o);
+        });
+        w.fn("replace", "(from, to, matchBlockId|'natural', newBlockId, opts?) swap matching blocks in a box, e.g. sand → grass_block, stone → mossy_cobblestone (gradual) → edit id", (in, s, a) -> {
+            BlockPos p1 = McUtil.blockPos(Args.pos(in, Args.get(a, 0), "from")), p2 = McUtil.blockPos(Args.pos(in, Args.get(a, 1), "to"));
+            String match = Args.str(in, a, 2, "block to replace");
+            String st = McUtil.blockString(McUtil.block(in, Args.str(in, a, 3, "new block id")));
+            JsObject o = Args.opts(a, 4);
+            ServerLevel l = levelOf(inst, o);
+            var b = WorldEdits.box(McUtil.dimId(l), p1, p2, st, false);
+            b.job.match = match.equals("natural") ? "natural" : McUtil.parseId(in, match, "block").toString();
+            return WorldEdits.submit(inst, in, l, b, o);
+        });
+        w.fn("clear", "(from, to, opts?) dig out every natural block in a box (stone, dirt, sand, natural trees…) — builds stay (gradual) → edit id", (in, s, a) -> {
+            BlockPos p1 = McUtil.blockPos(Args.pos(in, Args.get(a, 0), "from")), p2 = McUtil.blockPos(Args.pos(in, Args.get(a, 1), "to"));
+            JsObject o = Args.opts(a, 2);
+            ServerLevel l = levelOf(inst, o);
+            var b = WorldEdits.box(McUtil.dimId(l), p1, p2, "minecraft:air", false);
+            b.job.match = "natural";
+            return WorldEdits.submit(inst, in, l, b, o);
+        });
+        w.fn("grow", "(pos, tree='oak'|'birch'|'spruce'|'jungle'|'acacia'|'cherry'|'mangrove'|'azalea'|'poplar') grow a real tree right now (needs room and soil) → blocks changed (0 = no room)", (in, s, a) -> {
+            ServerLevel l = levelOf(inst, Args.opts(a, 2));
+            return (double) WorldEdits.growTree(inst, in, l, McUtil.blockPos(Args.pos(in, Args.get(a, 0), "position")), Args.str(a, 1, "oak"));
+        });
+        w.fn("edits", "() → [{id, kind, done, total, state}] persistent FIFO; first runs, others wait; world_edit_done fires for each", (in, s, a) -> {
+            JsArray arr = new JsArray();
+            for (ScriptRecord.EditJob j : inst.rec.edits) arr.list.add(new JsObject().put("id", j.id).put("kind", j.kind).put("done", (double) j.next).put("total", (double) j.total()).put("state", arr.list.isEmpty() ? "running" : "queued"));
+            return arr;
+        });
+        w.fn("cancelEdit", "(id) stop a gradual change (blocks already changed stay; restoreBlocks() undoes them)", (in, s, a) -> {
+            String id = Args.str(in, a, 0, "edit id");
+            return inst.rec.edits.removeIf(j -> j.id.equals(id));
+        });
         w.fn("isLoaded", "(pos) → boolean", (in, s, a) -> levelOf(inst, Args.opts(a, 1)).isLoaded(McUtil.blockPos(Args.pos(in, Args.get(a, 0), "position"))));
         w.fn("dimension", "() → this script's dimension id", (in, s, a) -> inst.rec.dimension);
         return w;
@@ -432,6 +522,18 @@ public final class ScriptApi {
         return dx * dx + dy * dy + dz * dz;
     }
 
+    /** 모두의 하늘을 바꾼다: 서버 전체 간격을 지키고, 모두에게 누구의 소원인지 알린다. */
+    private static void skyChange(ScriptInstance inst, String what) {
+        WishEngine eng = WishEngine.get();
+        long wait = eng.state().lastSkyChange + AiConfig.get().skyChangeCooldownMinutes * 60_000L - System.currentTimeMillis();
+        if (wait > 0) throw deny("The sky was changed recently; it can change again in " + (wait + 59_999) / 60_000 + " min (world.skyReady())");
+        eng.state().lastSkyChange = System.currentTimeMillis();
+        String who = inst.rec.ownerName == null ? "세계" : inst.rec.ownerName;
+        for (ServerPlayer p : server().getPlayerList().getPlayers()) {
+            eng.ui().notify(p, eng.spiritName(), who + "의 소원으로 하늘이 바뀐다 — " + what, "mystic", 6);
+        }
+    }
+
     private static void runCommand(String cmd) {
         MinecraftServer srv = server();
         srv.getCommands().performPrefixedCommand(srv.createCommandSourceStack().withSuppressedOutput(), cmd);
@@ -440,34 +542,7 @@ public final class ScriptApi {
     private static Object placeBlock(ScriptInstance inst, Interpreter in, double[] pos, String id, JsObject opts) {
         ServerLevel l = levelOf(inst, opts);
         BlockState st = McUtil.block(in, id);
-        BlockPos p = McUtil.blockPos(pos);
-        Policy.checkBlock(in, inst, l, p, st);
-        if (inst.dry) { inst.effect("setBlock " + McUtil.blockId(st) + " at " + p.toShortString()); return true; }
-        BlockState before = l.getBlockState(p);
-        String dim = McUtil.dimId(l);
-        ScriptRecord.BlockChange existing = null;
-        for (ScriptRecord.BlockChange b : inst.rec.blocks) if (b.x == p.getX() && b.y == p.getY() && b.z == p.getZ() && dim.equals(b.dimension)) existing = b;
-        boolean temp = Args.optBool(opts, "temporary", false) || Args.optNum(opts, "seconds", 0) > 0;
-        if (existing == null) {
-            ScriptRecord.BlockChange ch = new ScriptRecord.BlockChange();
-            ch.dimension = dim;
-            ch.x = p.getX();
-            ch.y = p.getY();
-            ch.z = p.getZ();
-            ch.before = McUtil.blockString(before);
-            ch.temporary = temp;
-            existing = ch;
-            inst.rec.blocks.add(ch);
-        }
-        existing.after = McUtil.blockString(st);
-        if (temp) existing.temporary = true;
-        boolean ok = l.setBlock(p, st, 3);
-        double secs = Args.optNum(opts, "seconds", 0);
-        if (secs > 0) {
-            ScriptRecord.BlockChange ch = existing;
-            WishEngine.get().scripts().scheduleRevert(inst.rec.id, ch, (long) (Math.min(3600, secs) * 20));
-        }
-        return ok;
+        return WorldEdits.place(inst, in, l, McUtil.blockPos(pos), st, Args.optBool(opts, "temporary", false), Args.optNum(opts, "seconds", 0), false);
     }
 
     // =====================================================================================
@@ -530,15 +605,29 @@ public final class ScriptApi {
             if (Args.optBool(opts, "keep", inst.rec.keepEntitiesDefault)) inst.rec.keptEntities.add(e.getUUID().toString());
             return EntityRef.of(e);
         });
-        o.fn("display", "(kind 'text'|'block'|'item', pos, opts) floating visual: text{text, color, background, scale, billboard}, block{block, scale, rotation}, item{item, scale, spin}. Use for holograms, statues, procedural models", (in, s, a) -> {
+        o.fn("model", "(origin, parts:[{block|item|text|texture, x,y,z offset, scale|sx,sy,sz, rx,ry,rz degrees}…] (max 48), opts?{yaw, scale, keep, glow, seconds}) build a procedural 3D model from display entities that moves as one → Model (move/rotate/scale/part/follow/remove)", (in, s, a) -> {
+            double[] origin = Args.pos(in, Args.get(a, 0), "model origin");
+            if (!(Args.get(a, 1) instanceof JsArray parts)) throw in.error("entities.model needs an array of parts");
+            JsObject opts = Args.opts(a, 2);
+            ScriptRecord.ModelSpec m = Models.create(inst, in, origin, parts, opts);
+            return new dev.newyear.countdown.ai.script.api.ModelRef(inst.rec.id, m.id, inst.dry ? m : null);
+        });
+        o.fn("display", "(kind 'text'|'block'|'item'|'texture', pos, opts) floating visual: text{text, color, background, scale, billboard}, block{block, scale, rotation}, item{item, scale, texture?}, texture{texture: name from textures.create, scale, billboard='center'} — an AI-drawn picture in the world. Use for holograms, statues, signs", (in, s, a) -> {
             String kind = Args.str(in, a, 0, "kind");
             double[] p = Args.pos(in, Args.get(a, 1), "position");
             JsObject opts = Args.opts(a, 2);
+            if (kind.equals("texture")) {
+                opts = new JsObject(opts.map);
+                if (!(opts.get("texture") instanceof String)) throw in.error("display('texture', pos, {texture: 'name'}) needs a texture name");
+                if (!opts.map.containsKey("billboard")) opts.put("billboard", "center");
+                if (!opts.map.containsKey("item")) opts.put("item", "minecraft:paper");
+                kind = "item";
+            }
             EntityType<?> type = switch (kind) {
                 case "text" -> EntityTypes.TEXT_DISPLAY;
                 case "block" -> EntityTypes.BLOCK_DISPLAY;
                 case "item" -> EntityTypes.ITEM_DISPLAY;
-                default -> throw in.error("display kind must be text, block or item");
+                default -> throw in.error("display kind must be text, block, item or texture");
             };
             Policy.checkRange(in, inst, p);
             int mine = inst.dry ? inst.dryEntitySeq : Policy.liveCount(inst);
@@ -572,7 +661,11 @@ public final class ScriptApi {
                     td.setLineWidth(200);
                 }
                 case Display.BlockDisplay bd -> bd.setBlockState(McUtil.block(in, Args.optStr(opts, "block", "minecraft:glowstone")));
-                case Display.ItemDisplay id -> id.setItemStack(McUtil.makeStack(in, Args.optStr(opts, "item", "minecraft:nether_star"), 1, new JsObject(), inst.rec.id));
+                case Display.ItemDisplay id -> {
+                    JsObject io = new JsObject();
+                    if (opts.get("texture") instanceof String tex) io.put("texture", tex);
+                    id.setItemStack(McUtil.makeStack(in, Args.optStr(opts, "item", "minecraft:nether_star"), 1, io, inst.rec.id));
+                }
                 default -> { }
             }
             d.addTag("wishai");
@@ -913,26 +1006,33 @@ public final class ScriptApi {
     // quests
 
     private static ApiObject buildQuests(ScriptInstance inst) {
+        return buildQuests(inst, () -> WishEngine.get().state().quests);
+    }
+
+    static ApiObject buildQuests(ScriptInstance inst, java.util.function.Supplier<Map<String, Quest>> liveQuests) {
         ApiObject o = new ApiObject("quests");
-        o.fn("create", "({title, description, conditions, reward, failure, objectives:[{id, text, target=1, optional}], timeLimit:seconds, participants:[Player], priority}) → Quest. Shows the quest panel/HUD. Update with q.add(objId)", (in, s, a) -> {
+        o.fn("create", "({title, description, conditions, reward, failure, objectives:[{id, text, target=1, optional}], timeLimit:seconds, participants:[Player], priority}) → Quest. Stages a hidden quest; register its condition handlers in this same script. Panel/HUD and deadline start only after successful activation. Update with q.add(objId)", (in, s, a) -> {
             if (!(Args.get(a, 0) instanceof JsObject spec)) throw in.error("quests.create needs an object");
             Quest q = QuestSpecs.fromScript(in, spec, inst);
-            if (inst.dry) { inst.effect("create quest '" + q.title + "' with " + q.objectives.size() + " objectives"); return new QuestRef(q.id, true, q); }
+            if (inst.dry) { inst.dryQuests.put(q.id, q); inst.effect("create quest '" + q.title + "' with " + q.objectives.size() + " objectives"); return new QuestRef(q.id, true, q); }
             WishEngine.get().quests().create(q);
-            return new QuestRef(q.id, false, null);
+            return QuestRef.view(inst, q);
         });
         o.fn("get", "(id) → Quest or null", (in, s, a) -> {
             String id = Args.str(in, a, 0, "quest id");
-            if (WishEngine.get().state().quests.containsKey(id)) return new QuestRef(id, false, null);
-            return null;
+            if (inst.dry && inst.dryQuests.containsKey(id)) return new QuestRef(id, true, inst.dryQuests.get(id));
+            Quest q = liveQuests.get().get(id);
+            return q == null ? null : QuestRef.view(inst, q);
         });
         o.fn("active", "(player?) → [Quest] active quests (of that player)", (in, s, a) -> {
             JsArray arr = new JsArray();
             String who = Args.get(a, 0) instanceof PlayerRef pr ? pr.id.toString() : null;
-            for (Quest q : WishEngine.get().state().quests.values()) {
+            java.util.Map<String, Quest> visible = new java.util.LinkedHashMap<>(liveQuests.get());
+            if (inst.dry) visible.putAll(inst.dryQuests);
+            for (Quest q : visible.values()) {
                 if (q.state != Quest.State.ACTIVE) continue;
                 if (who != null && !q.involves(who)) continue;
-                arr.list.add(new QuestRef(q.id, false, null));
+                arr.list.add(QuestRef.view(inst, q));
             }
             return arr;
         });
@@ -944,11 +1044,11 @@ public final class ScriptApi {
 
     private static ApiObject buildMemory(ScriptInstance inst) {
         ApiObject o = new ApiObject("memory");
-        o.fn("remember", "(text, opts?{importance 1-10, scope:'player'|'world', kind, tags:[...], thread}) store a memory the AI will recall later (max 30 per script)", (in, s, a) -> {
+        o.fn("remember", "(text, opts?{importance 1-10, scope:'player'|'world', kind, tags:[...], thread, shareWith:[Player]}) store a memory the AI will recall later (max 30 per script) → memory id. shareWith: other players who may also know this private memory (only if the owner agreed)", (in, s, a) -> {
             String text = MemoryText.limit(Args.str(in, a, 0, "text"), 400);
             JsObject opts = Args.opts(a, 1);
             if (++inst.memoryWrites > 30) throw new ScriptError(ScriptError.Kind.BUDGET, "memory.remember limit reached for this script", 0, 0);
-            if (inst.dry) { inst.effect("remember: " + text); return true; }
+            if (inst.dry) { inst.effect("remember: " + text); return "m-dry"; }
             MemoryRecord r = new MemoryRecord();
             r.text = text;
             r.kind = Args.optStr(opts, "kind", "event");
@@ -966,18 +1066,37 @@ public final class ScriptApi {
                 r.pos = new int[]{(int) p[0], (int) p[1], (int) p[2]};
                 r.dimension = inst.rec.dimension;
             }
-            WishEngine.get().rememberFromScript(r);
-            return true;
+            if (r.scope == MemoryRecord.Scope.PLAYER && opts.get("shareWith") instanceof JsArray sw) {
+                var prof = WishEngine.get().state().players.get(r.owner);
+                if (prof != null && prof.memoryLocked) throw deny(r.ownerName + " has locked their memories; they can't be shared");
+                for (Object x : sw.list) if (x instanceof PlayerRef pr && !pr.id.toString().equals(r.owner) && r.sharedWith.size() < 16) r.sharedWith.add(pr.id.toString());
+            }
+            return WishEngine.get().rememberFromScript(r);
         });
-        o.fn("recall", "(query, max=5) → [{text, kind, importance, when}] memories visible to this script's owner", (in, s, a) -> {
+        o.fn("share", "(memoryId, player) share one of the owner's private memories with another player (only memories this script's owner owns)", (in, s, a) -> {
+            String id = Args.str(in, a, 0, "memory id");
+            if (!(Args.get(a, 1) instanceof PlayerRef pr)) throw in.error("memory.share needs a Player");
+            if (inst.dry) { inst.effect("share memory " + id + " with " + pr.name); return true; }
+            if (inst.rec.owner == null) throw deny("World scripts have no private memories to share");
+            var prof = WishEngine.get().state().players.get(inst.rec.owner);
+            if (prof != null && prof.memoryLocked) throw deny(inst.rec.ownerName + " has locked their memories");
+            var res = WishEngine.get().memory().share(id, pr.id.toString(), inst.rec.owner);
+            if (res == dev.newyear.countdown.ai.memory.MemoryStore.ShareResult.NOT_OWNER) throw deny("That memory belongs to someone else");
+            return res == dev.newyear.countdown.ai.memory.MemoryStore.ShareResult.OK || res == dev.newyear.countdown.ai.memory.MemoryStore.ShareResult.ALREADY;
+        });
+        o.fn("recall", "(query, max=5) → [{id, text, kind, importance, when, shared}] memories visible to this script's owner (own, shared with them, world); matches words and meaning", (in, s, a) -> {
             String q = Args.str(in, a, 0, "query");
             int max = (int) Math.max(1, Math.min(10, Args.num(a, 1, 5)));
             JsArray arr = new JsArray();
-            for (var h : WishEngine.get().memory().search(q, inst.rec.owner, max, null, true, System.currentTimeMillis())) {
+            WishEngine eng = WishEngine.get();
+            float[] qv = inst.dry ? null : eng.embedQueryCached(q);
+            for (var h : eng.memory().search(q, qv, inst.rec.owner, max, null, true, System.currentTimeMillis(), java.util.Set.of())) {
                 JsObject m = new JsObject();
-                m.put("text", h.record().text).put("kind", h.record().kind).put("importance", (double) h.record().importance).put("when", (double) h.record().created);
+                m.put("id", h.record().id).put("text", h.record().text).put("kind", h.record().kind).put("importance", (double) h.record().importance)
+                        .put("when", (double) h.record().created).put("shared", inst.rec.owner != null && !inst.rec.owner.equals(h.record().owner) && h.record().scope == MemoryRecord.Scope.PLAYER);
                 arr.list.add(m);
             }
+            in.budget.allocate(arr.list.size() * 6L + 1);
             return arr;
         });
         return o;
@@ -1017,6 +1136,38 @@ public final class ScriptApi {
             if (inst.dry) { inst.effect("script stop"); return true; }
             WishEngine.get().scripts().requestStop(inst.rec.id, MemoryText.limit(Args.str(a, 0, "script finished"), 200));
             return true;
+        });
+        return o;
+    }
+
+    private static ApiObject buildTextures(ScriptInstance inst) {
+        ApiObject o = new ApiObject("textures");
+        o.fn("create", "(name, {pixels:['..##..', …] up to 32x32, palette:{'#':'#ffcc00', 'o':'#80ffffff' (aarrggbb = see-through)}}) draw a picture every player sees as a real texture. "
+                + "Use it as an item's look: give(id, n, {texture: name}) / equip / display('item'|'texture', pos, {texture}) / model parts {item, texture}, or as a HUD icon ui.status(.., {icon:{texture: name}}). "
+                + "Names are global and stay in the world (redrawing the same name updates it everywhere) → name", (in, s, a) -> {
+            String name = Args.str(in, a, 0, "texture name");
+            if (!(Args.get(a, 1) instanceof JsObject spec)) throw in.error("textures.create(name, {pixels, palette})");
+            Textures.Def d = Textures.parse(in, name, spec);
+            if (inst.dry) { inst.effect("texture '" + d.id + "' " + d.w + "x" + d.h); return d.id; }
+            WishEngine eng = WishEngine.get();
+            Textures.Def old = eng.state().textures.get(d.id);
+            if (old != null && old.scriptId != null && !old.scriptId.equals(inst.rec.id)) {
+                ScriptRecord other = eng.state().scripts.get(old.scriptId);
+                if (other != null && other.state.live()) throw deny("Texture name '" + d.id + "' is used by another active script; pick another name");
+            }
+            if (old == null && eng.state().textures.size() >= AiConfig.get().maxDynamicTextures) throw deny("Server texture limit reached (" + AiConfig.get().maxDynamicTextures + ")");
+            long mine = eng.state().textures.values().stream().filter(t -> inst.rec.id.equals(t.scriptId)).count();
+            if (old == null && mine >= 16) throw deny("This script already drew 16 textures");
+            d.scriptId = inst.rec.id;
+            d.owner = inst.rec.owner;
+            d.created = System.currentTimeMillis();
+            eng.state().textures.put(d.id, d);
+            eng.ui().broadcastTexture(d);
+            return d.id;
+        });
+        o.fn("exists", "(name) → boolean", (in, s, a) -> {
+            String id = Textures.normalize(Args.str(in, a, 0, "texture name"));
+            return WishEngine.get() != null && WishEngine.get().state().textures.containsKey(id);
         });
         return o;
     }

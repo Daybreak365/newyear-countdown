@@ -9,7 +9,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 /**
  * AI 소원 UI 프로토콜. UI 는 선언형이라 서버가 JSON 으로 "무엇을" 보여 줄지 보내고, 모양은 클라이언트 디자인 시스템이 정한다.
- * 클라이언트 → 서버는 대화 입력과 UI 상호작용(고유 ID + nonce)만 보낸다. API 키는 어떤 패킷에도 실리지 않는다.
+ * 관리자 임시 키는 OP 전용 요청으로 서버에만 전달한다. 서버 응답에는 키를 넣지 않는다.
  */
 public final class AiPackets {
     public static final int MAX_JSON = 60_000;
@@ -73,8 +73,21 @@ public final class AiPackets {
         }
     }
 
+    /** 클라이언트 → 서버: 관리자 화면 요청 ({"op": ...} JSON; 코드 편집처럼 큰 요청도 실린다). 서버가 권한을 다시 확인한다. */
+    public record AdminC2S(String json) implements CustomPacketPayload {
+        public static final Type<AdminC2S> ID = new Type<>(ModReg.id("ai_admin"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, AdminC2S> CODEC =
+                ByteBufCodecs.stringUtf8(MAX_JSON).map(AdminC2S::new, AdminC2S::json).cast();
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return ID;
+        }
+    }
+
     public static void registerTypes() {
         PayloadTypeRegistry.clientboundPlay().register(UiS2C.ID, UiS2C.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(AdminC2S.ID, AdminC2S.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ChatC2S.ID, ChatC2S.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(InteractC2S.ID, InteractC2S.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ActionC2S.ID, ActionC2S.CODEC);

@@ -178,6 +178,10 @@ public final class UiService {
         send(p, o);
     }
 
+    public void refreshInteractions(ServerPlayer p) {
+        for (Pending pd : pending.values()) if (pd.player.equals(p.getUUID())) sendInteraction(p, pd);
+    }
+
     public void openDialogue(ServerPlayer p, String wishId) {
         JsonObject o = op("open");
         o.addProperty("wishId", wishId == null ? "" : wishId);
@@ -210,6 +214,72 @@ public final class UiService {
         } else {
             p.sendSystemMessage(spiritPrefix().append(Component.literal(title + (subtitle == null || subtitle.isEmpty() ? "" : " — " + subtitle)).withStyle(ChatFormatting.GOLD)));
         }
+    }
+
+    // ---------------------------------------------------------------- 블록 변경 미리보기
+
+    /** 한 패킷에 싣는 미리보기 블록 수 (넘으면 truncated 로 알린다). */
+    public static final int PREVIEW_MAX = 2048;
+
+    /**
+     * 계획된 블록 변경을 반투명 유령 블록으로 그 플레이어에게만 보여 준다 (세계는 바뀌지 않는다).
+     * 형식: 기준점 + 블록 상태 팔레트 + [dx, dy, dz, 팔레트 번호, 바꾸는 칸이면 1] 평탄 배열 — 2048칸이어도 패킷 한도 안에 든다.
+     */
+    public JsonObject previewJson(String id, String title, List<dev.newyear.countdown.ai.script.ScriptRecord.BlockChange> blocks, int seconds) {
+        JsonObject o = op("block_preview");
+        o.addProperty("id", id);
+        o.addProperty("title", title == null ? "" : title);
+        o.addProperty("seconds", Math.max(0, Math.min(600, seconds)));
+        o.addProperty("total", blocks.size());
+        if (blocks.isEmpty()) return o;
+        var first = blocks.get(0);
+        o.addProperty("dimension", first.dimension);
+        JsonArray origin = new JsonArray();
+        origin.add(first.x);
+        origin.add(first.y);
+        origin.add(first.z);
+        o.add("origin", origin);
+        Map<String, Integer> palette = new LinkedHashMap<>();
+        JsonArray flat = new JsonArray();
+        int n = 0;
+        for (var b : blocks) {
+            if (!first.dimension.equals(b.dimension)) continue;
+            if (n++ >= PREVIEW_MAX) break;
+            String after = b.after == null ? "minecraft:air" : b.after;
+            Integer pi = palette.get(after);
+            if (pi == null) {
+                pi = palette.size();
+                palette.put(after, pi);
+            }
+            flat.add(b.x - first.x);
+            flat.add(b.y - first.y);
+            flat.add(b.z - first.z);
+            flat.add(pi);
+            String before = b.before == null ? "" : b.before;
+            flat.add(before.startsWith("minecraft:air") || before.startsWith("minecraft:cave_air") || before.startsWith("minecraft:void_air") || before.isEmpty() ? 0 : 1);
+        }
+        JsonArray pal = new JsonArray();
+        for (String s : palette.keySet()) pal.add(s);
+        o.add("palette", pal);
+        o.add("b", flat);
+        if (blocks.size() > PREVIEW_MAX) o.addProperty("truncated", true);
+        return o;
+    }
+
+    /** 유령 블록 미리보기를 보낸다. 모드가 없는 클라이언트에는 채팅으로 요약만. */
+    public void blockPreview(ServerPlayer p, String id, String title, List<dev.newyear.countdown.ai.script.ScriptRecord.BlockChange> blocks, int seconds) {
+        if (p == null) return;
+        if (hasModClient(p)) {
+            send(p, previewJson(id, title, blocks, seconds));
+        } else if (!blocks.isEmpty()) {
+            p.sendSystemMessage(spiritPrefix().append(Component.literal("미리보기: 블록 " + blocks.size() + "칸이 놓일 예정입니다 (" + blocks.get(0).x + ", " + blocks.get(0).y + ", " + blocks.get(0).z + " 부근)").withStyle(ChatFormatting.GRAY)));
+        }
+    }
+
+    public void clearBlockPreview(ServerPlayer p, String id) {
+        JsonObject o = op("block_preview_clear");
+        o.addProperty("id", id == null ? "" : id);
+        send(p, o);
     }
 
     // ---------------------------------------------------------------- 상호작용
@@ -308,6 +378,7 @@ public final class UiService {
     public String contract(ServerPlayer p, Wish w, Responder r) {
         Wish.Contract c = w.contract;
         StringBuilder sb = new StringBuilder(c.terms);
+        if(w.buildPlan!=null) sb.append("\n확정할 건축 위치: ").append(w.buildPlan.dimension).append(" ").append(w.buildPlan.bounds());
         if (!c.reward.isEmpty()) sb.append("\n보상: ").append(c.reward);
         if (!c.penalty.isEmpty()) sb.append("\n대가: ").append(c.penalty);
         if (c.timeLimitSeconds > 0) sb.append("\n제한 시간: ").append(formatSeconds(c.timeLimitSeconds));
@@ -322,6 +393,17 @@ public final class UiService {
 
     /** 클라이언트가 보낸 응답을 검증하고 처리한다. 결과 메시지(실패 이유)를 돌려준다, 성공 시 null. */
     public String handleInteract(ServerPlayer p, String id, int index, String value, int nonce) {
+        try {
+            String result = processInteract(p, id, index, value, nonce);
+            Pending pd = pending.get(id);
+            if (result != null && pd != null && pd.player.equals(p.getUUID())) sendInteraction(p, pd);
+            return result;
+        } finally {
+            if (!eng.agent().busyPlayer(p.getUUID())) thinking(p, null, false, "");
+        }
+    }
+
+    private String processInteract(ServerPlayer p, String id, int index, String value, int nonce) {
         Integer last = lastNonce.get(p.getUUID());
         if (last != null && nonce != 0 && last == nonce) return "duplicate";
         if (nonce != 0) lastNonce.put(p.getUUID(), nonce);
@@ -332,6 +414,9 @@ public final class UiService {
             return "expired";
         }
         if (!pd.player.equals(p.getUUID())) return "not yours";      // 다른 플레이어의 UI 조작은 무시
+        if (eng.agent().rejectWhileBusy(p)) {
+            return "대답을 준비 중입니다. 끝난 뒤 선택해 주세요.";
+        }
         if (pd.expiresTick > 0 && eng.tick() > pd.expiresTick) {
             expire(pd, "expired");
             return "expired";
@@ -351,6 +436,7 @@ public final class UiService {
         if (pd.wishId != null) {
             Wish w = eng.state().wishes.get(pd.wishId);
             if (w != null) w.addLine("player", (pd.kind.equals("input") ? "" : "[선택] ") + v, System.currentTimeMillis());
+            playerLine(p, pd.wishId, (pd.kind.equals("input") ? "" : "[선택] ") + v);
             eng.scripts().emitUiResponse(pd.wishId, p, id, v);
         }
         if (pd.responder != null) {
@@ -433,6 +519,7 @@ public final class UiService {
         o.addProperty("reward", q.reward);
         o.addProperty("failure", q.failure);
         o.addProperty("state", q.state.name());
+        o.addProperty("preparing", q.preparing);
         o.addProperty("priority", q.priority);
         o.addProperty("note", q.resultNote == null ? "" : q.resultNote);
         o.addProperty("owner", q.ownerName == null ? "" : q.ownerName);
@@ -455,6 +542,7 @@ public final class UiService {
     }
 
     public void pushQuest(Quest q) {
+        if (q.preparing) return;
         JsonObject o = op("quest");
         o.add("quest", questJson(q));
         for (ServerPlayer p : participants(q)) send(p, o);
@@ -483,7 +571,22 @@ public final class UiService {
             icon.addProperty("palette", s.iconPalette == null ? "" : s.iconPalette);
             o.add("icon", icon);
         }
+        if (s.iconTexture != null && !s.iconTexture.isEmpty()) o.addProperty("texture", s.iconTexture);
         return o;
+    }
+
+    // ---------------------------------------------------------------- 동적 텍스처
+
+    /** 새 텍스처를 접속한 모든 (모드) 클라이언트에 보낸다. */
+    public void broadcastTexture(dev.newyear.countdown.ai.script.Textures.Def d) {
+        JsonObject o = dev.newyear.countdown.ai.script.Textures.toJson(d);
+        for (ServerPlayer p : eng.server().getPlayerList().getPlayers()) send(p, o);
+    }
+
+    public void removeTexture(String id) {
+        JsonObject o = op("texture_remove");
+        o.addProperty("id", id);
+        for (ServerPlayer p : eng.server().getPlayerList().getPlayers()) send(p, o);
     }
 
     public void setStatus(StatusEntry s) {
@@ -523,12 +626,16 @@ public final class UiService {
 
     /** 접속·재접속 시 필요한 UI 를 모두 복구한다. */
     public void syncPlayer(ServerPlayer p) {
+        dev.newyear.countdown.ai.script.RuntimeControls.sync(p);
         String uuid = p.getUUID().toString();
+        // 텍스처는 하나씩 (HUD·아이템이 쓰기 전에 먼저)
+        for (var t : eng.state().textures.values()) send(p, dev.newyear.countdown.ai.script.Textures.toJson(t));
         JsonObject o = op("sync");
         o.addProperty("spirit", AiConfig.get().spiritName);
         o.addProperty("enabled", eng.aiAvailable());
         JsonArray quests = new JsonArray();
         for (Quest q : eng.state().quests.values()) {
+            if (q.preparing) continue;
             if (!q.involves(uuid)) continue;
             if (q.state != Quest.State.ACTIVE && System.currentTimeMillis() - q.created > 3_600_000L * 24) continue;
             quests.add(questJson(q));
@@ -540,7 +647,12 @@ public final class UiService {
         // 열린 대화 + 최근 소원 목록
         var prof = eng.state().players.get(uuid);
         Wish open = prof == null || prof.openWishId == null ? null : eng.state().wishes.get(prof.openWishId);
+        String runningWish = eng.agent().busyWish(p.getUUID());
+        if (runningWish != null) open = eng.state().wishes.get(runningWish);
         if (open != null) o.add("conversation", conversationJson(open));
+        o.addProperty("thinking", eng.agent().busyPlayer(p.getUUID()));
+        String busyWish = eng.agent().busyWish(p.getUUID());
+        o.addProperty("thinkingWishId", busyWish == null ? "" : busyWish);
         JsonArray recent = new JsonArray();
         List<Wish> mine = new ArrayList<>();
         for (Wish w : eng.state().wishes.values()) if (uuid.equals(w.player)) mine.add(w);
@@ -589,7 +701,12 @@ public final class UiService {
     public void tick() {
         long now = eng.tick();
         if (now % 10 == 0 && !pending.isEmpty()) {
-            for (Pending pd : new ArrayList<>(pending.values())) if (pd.expiresTick > 0 && now > pd.expiresTick) expire(pd, "expired");
+            for (Pending pd : new ArrayList<>(pending.values())) {
+                if (pd.expiresTick <= 0) continue;
+                // A contract cannot time out while its author is still explaining it.
+                if (eng.agent().busyPlayer(pd.player)) pd.expiresTick += 10;
+                else if (now > pd.expiresTick) expire(pd, "expired");
+            }
         }
         if (now % 20 == 0) {
             for (StatusEntry s : new ArrayList<>(eng.state().statuses.values())) {

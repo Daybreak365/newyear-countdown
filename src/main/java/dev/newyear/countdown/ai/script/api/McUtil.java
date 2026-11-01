@@ -1,6 +1,7 @@
 package dev.newyear.countdown.ai.script.api;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import dev.newyear.countdown.ai.script.ScriptInstance;
 import dev.newyear.countdown.ai.script.lang.Interpreter;
 import dev.newyear.countdown.ai.script.lang.Values;
 import dev.newyear.countdown.ai.script.lang.Values.JsObject;
@@ -199,6 +200,9 @@ public final class McUtil {
      * 아이템 생성. opts: {name, lore: [..] | "..", glow, color, data: {...}}.
      * data 는 아이템 CUSTOM_DATA 의 wishai 항목에 저장되어 이벤트에서 다시 읽을 수 있다 (특별한 아이템 표식).
      */
+    /** 동적 텍스처 아이템 모델 (assets/newyearcountdown/items/wish_texture.json → 클라이언트 특수 렌더러). */
+    public static final net.minecraft.resources.Identifier TEXTURE_MODEL = net.minecraft.resources.Identifier.fromNamespaceAndPath("newyearcountdown", "wish_texture");
+
     public static ItemStack makeStack(Interpreter in, String id, int count, JsObject opts, String scriptId) {
         Item item = item(in, id);
         int max = item.getDefaultMaxStackSize();
@@ -211,11 +215,22 @@ public final class McUtil {
         else if (lore instanceof Values.JsArray la) for (Object o : la.list) if (lines.size() < 8) lines.add(text(Interpreter.toStr(o), "#b8a9c9").withStyle(s -> s.withItalic(false)));
         if (!lines.isEmpty()) st.set(DataComponents.LORE, new ItemLore(lines.subList(0, Math.min(8, lines.size()))));
         if (Args.optBool(opts, "glow", false)) st.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+        // AI 가 그린 텍스처를 입힌다: 아이템 모델을 동적 텍스처 렌더러로 바꾸고 어떤 그림인지 표시해 둔다
+        String texture = Args.optStr(opts, "texture", null);
+        if (texture != null) {
+            String tid = dev.newyear.countdown.ai.script.Textures.normalize(texture);
+            var eng = dev.newyear.countdown.ai.WishEngine.get();
+            if (eng != null && !eng.state().textures.containsKey(tid) && !(ScriptInstance.of(in) != null && ScriptInstance.of(in).dry)) {
+                throw in.error("No texture named '" + tid + "'. Draw it first with textures.create('" + tid + "', {pixels, palette})");
+            }
+            st.set(DataComponents.ITEM_MODEL, TEXTURE_MODEL);
+        }
         Object data = opts.get("data");
-        if ((data instanceof JsObject) || scriptId != null && (name != null || data instanceof JsObject)) {
+        if ((data instanceof JsObject) || texture != null || scriptId != null && (name != null || data instanceof JsObject)) {
             CompoundTag tag = new CompoundTag();
             CompoundTag w = new CompoundTag();
             if (scriptId != null) w.putString("script", scriptId);
+            if (texture != null) w.putString("texture", dev.newyear.countdown.ai.script.Textures.normalize(texture));
             if (data instanceof JsObject d) {
                 String json = dev.newyear.countdown.ai.script.lang.Stdlib.toJson(d).toString();
                 if (json.length() > 2000) throw in.error("item data too large (max 2000 chars of JSON)");
@@ -224,6 +239,7 @@ public final class McUtil {
             tag.put(DATA_KEY, w);
             st.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
         }
+        if (opts.get("components") instanceof JsObject components) dev.newyear.countdown.ai.script.RuntimeItems.apply(in, st, components);
         return st;
     }
 
