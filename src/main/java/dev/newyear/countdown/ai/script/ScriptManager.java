@@ -88,11 +88,13 @@ public final class ScriptManager {
 
     /** 검증을 통과한 기록을 실제로 실행한다. restored=true 면 서버 재시작 후 복구. */
     public Activation activate(ScriptRecord rec, boolean restored) {
+        ScriptInstance previous = live.get(rec.id);
+        boolean replacingCode = previous != null && !previous.source.equals(rec.code);
         if (live.containsKey(rec.id)) stop(rec.id, ScriptRecord.State.STOPPED, "replaced by new version", false);
         ScriptInstance inst = new ScriptInstance(rec, false);
         inst.restored = restored;
         try {
-            inst.program = Parser.parse(rec.code);
+            inst.program = Parser.parse(inst.source);
         } catch (ScriptError e) {
             rec.state = ScriptRecord.State.FAULTED;
             rec.lastError = e.describe();
@@ -111,6 +113,12 @@ public final class ScriptManager {
             rec.expiresTick = rec.durationTicks > 0 ? rec.startedTick + rec.durationTicks : 0;
         }
         rec.state = ScriptRecord.State.ACTIVE;
+        if (replacingCode || restored && rec.continuations != null && rec.continuations.has("code")
+                && !Continuations.codeHash(inst.source).equals(rec.continuations.get("code").getAsString())) {
+            // Bindings from replaced code must not reserve slots for actions it no longer implements.
+            RuntimeState.section(rec, "controls").asMap().clear();
+            RuntimeState.section(rec, "panels").asMap().clear();
+        }
         live.put(rec.id, inst);
         indexDirty = true;
         Budget b = newBudget();
@@ -119,10 +127,29 @@ public final class ScriptManager {
         b.reset();
         try {
             inst.in.run(inst.program);
+            if (restored && AiConfig.get().scriptPersistClosures && rec.continuations != null) {
+                var res = Continuations.restore(inst, rec.continuations, eng.tick(), codecHost);
+                inst.lostContinuations = res.lost().size();
+                if (res.kept() + res.revived() + res.dropped() + res.brains() > 0 || !res.lost().isEmpty()) {
+                    NewYearCountdown.LOGGER.info("[WishAI] script {} resumed: {} re-timed, {} revived from saved closures, {} already finished, {} brains{}",
+                            rec.id, res.kept(), res.revived(), res.dropped(), res.brains(), res.lost().isEmpty() ? "" : ", lost: " + res.lost());
+                }
+                indexDirty = true;
+            }
+            RuntimeControls.validateReceiver(inst);
+            checkHeap(inst);
+            eng.quests().validateTrackers(inst);
+            rec.subscriptions = new ArrayList<>(inst.listeners.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty()).map(Map.Entry::getKey).sorted().toList());
         } catch (ScriptError e) {
+            eng.quests().rollbackPreparation(inst);
             live.remove(rec.id);
             indexDirty = true;
             rec.lastError = e.describe();
+            rec.state = ScriptRecord.State.FAULTED;
+            RuntimeControls.cleanup(rec);
+            RuntimeState.suspend(rec);
+            eng.extensions().cleanup(rec.id);
             // 복구 실패는 세계에 남은 결과물(엔티티·블록)을 지우지 않는다 — 다시 시작할 수 있게
             if (!restored) cleanup(rec, inst, true);
             else eng.ui().cancelInteractionsOfScript(rec.id);
@@ -130,8 +157,13 @@ public final class ScriptManager {
             rec.stateReason = "startup error";
             return new Activation(false, e.describe(), new ArrayList<>(inst.in.log));
         } catch (RuntimeException e) {
+            eng.quests().rollbackPreparation(inst);
             live.remove(rec.id);
             indexDirty = true;
+            rec.state = ScriptRecord.State.FAULTED;
+            RuntimeControls.cleanup(rec);
+            RuntimeState.suspend(rec);
+            eng.extensions().cleanup(rec.id);
             NewYearCountdown.LOGGER.warn("[WishAI] script {} crashed during startup", rec.id, e);
             if (!restored) cleanup(rec, inst, true);
             rec.state = ScriptRecord.State.FAULTED;
@@ -141,7 +173,122 @@ public final class ScriptManager {
             rec.steps += b.steps();
             rec.runs++;
         }
+        if (restored) applyGoals(inst);
+        RuntimeState.restore(rec);
+        for (ServerPlayer p : eng.online()) RuntimeControls.sync(p);
+        inst.initialized = true;
+        eng.quests().publishPrepared(inst);
         return new Activation(true, null, new ArrayList<>(inst.in.log));
+    }
+
+    // ---------------------------------------------------------------- 엔티티 AI 목표
+
+    /** 목표를 등록하고 (같은 엔티티의 같은 종류는 바꿔 끼운다) 지금 로드된 몹에 붙인다. 반환: 목표 id. */
+    public int addGoal(ScriptInstance inst, EntityRef r, ScriptRecord.GoalSpec spec) {
+        ScriptRecord rec = inst.rec;
+        rec.goals.removeIf(g -> g.entity.equals(spec.entity) && g.kind.equals(spec.kind));
+        if (rec.goals.size() >= AiConfig.get().scriptMaxGoals) {
+            throw new ScriptError(ScriptError.Kind.BUDGET, "Too many AI goals in this script (max " + AiConfig.get().scriptMaxGoals + ")", 0, 0);
+        }
+        spec.id = ++inst.seq;
+        rec.goals.add(spec);
+        Entity e = r.live();
+        if (e instanceof Mob m) {
+            // 같은 종류의 이전 목표를 뗀다
+            for (var g : new ArrayList<>(m.getGoalSelector().getAvailableGoals())) {
+                if (g.getGoal() instanceof Goals.WishGoal w && w.scriptId().equals(rec.id) && rec.goals.stream().noneMatch(x -> x.id == w.goalId())) {
+                    m.getGoalSelector().removeGoal(g.getGoal());
+                }
+            }
+            String err = Goals.apply(m, rec.id, spec);
+            if (err != null) {
+                rec.goals.remove(spec);
+                throw new ScriptError(ScriptError.Kind.RUNTIME, err, 0, 0);
+            }
+            if (!EntityRef.owned(inst, r)) m.addTag(GOAL_TAG + rec.id);
+        }
+        return spec.id;
+    }
+
+    public static final String GOAL_TAG = "wishai_goal_";
+
+    public void clearGoals(ScriptInstance inst, EntityRef r, int goalId) {
+        String u = r.id.toString();
+        inst.rec.goals.removeIf(g -> g.entity.equals(u) && (goalId < 0 || g.id == goalId));
+        if (goalId < 0 || inst.rec.goals.stream().noneMatch(g -> g.entity.equals(u) && g.kind.equals("script"))) inst.brains.remove(u);
+        if (r.live() instanceof Mob m) {
+            Goals.remove(m, inst.rec.id, goalId);
+            if (inst.rec.goals.stream().noneMatch(g -> g.entity.equals(u))) m.removeTag(GOAL_TAG + inst.rec.id);
+        }
+    }
+
+    /** 재시작 후: 저장된 목표 명세를 지금 로드된 몹에 다시 붙인다 (두뇌 콜백을 잃은 script 목표는 버린다). */
+    private void applyGoals(ScriptInstance inst) {
+        inst.rec.goals.removeIf(g -> g.kind.equals("script") && !inst.brains.containsKey(g.entity));
+        for (ScriptRecord.GoalSpec g : inst.rec.goals) {
+            try {
+                if (new EntityRef(UUID.fromString(g.entity), "?").live() instanceof Mob m) Goals.apply(m, inst.rec.id, g);
+            } catch (IllegalArgumentException ignored) { }
+        }
+        for (ScriptRecord.GoalSpec g : inst.rec.goals) inst.seq = Math.max(inst.seq, g.id);
+    }
+
+    /** 두뇌 콜백 호출 (몹의 목표 선택기 안에서, 서버 스레드). */
+    public Object callBrain(String scriptId, Mob mob, String which) {
+        ScriptInstance inst = live.get(scriptId);
+        if (inst == null) return false;
+        ScriptInstance.Brain b = inst.brains.get(mob.getUUID().toString());
+        if (b == null) return false;
+        Callable fn = switch (which) {
+            case "canUse" -> b.canUse;
+            case "start" -> b.start;
+            case "stop" -> b.stop;
+            default -> b.tick;
+        };
+        if (fn == null) return null;
+        return invoke(inst, fn, Arrays.asList(EntityRef.of(mob)), "brain." + which);
+    }
+
+    private void removeGoals(ScriptRecord rec) {
+        for (ScriptRecord.GoalSpec g : rec.goals) {
+            try {
+                if (new EntityRef(UUID.fromString(g.entity), "?").live() instanceof Mob m) {
+                    Goals.removeAll(m, rec.id);
+                    m.removeTag(GOAL_TAG + rec.id);
+                }
+            } catch (IllegalArgumentException ignored) { }
+        }
+        rec.goals.clear();
+    }
+
+    /** 클로저 저장/복구에서 게임 핸들 ↔ 참조 문자열. */
+    private final dev.newyear.countdown.ai.script.lang.ClosureCodec.Host codecHost = new dev.newyear.countdown.ai.script.lang.ClosureCodec.Host() {
+        @Override
+        public String refOf(Values.HostObject h) {
+            Object ref = h.getMember(null, "$ref");
+            return ref instanceof String s ? s : null;
+        }
+
+        @Override
+        public Object resolve(String ref) {
+            return resolveRef(ref);
+        }
+    };
+
+    /**
+     * 스크립트가 붙잡고 있는 값의 크기를 재고, 한도를 넘으면 오류로 센다 (여러 번 넘으면 멈춘다).
+     * 실행할 때마다 재지 않고 16번에 한 번, 또는 그 실행이 많이 할당했을 때만.
+     */
+    private void checkHeap(ScriptInstance inst) {
+        inst.runsSinceHeap = 0;
+        long cap = AiConfig.get().scriptHeapMaxBytes;
+        var r = dev.newyear.countdown.ai.script.lang.HeapMeter.measure(inst.heapRoots(), cap, inst.in.globals);
+        inst.rec.heapBytes = r.bytes();
+        if (r.overCap()) {
+            // 한 번에 멈추지는 않지만 예산 오류처럼 무겁게 센다
+            onError(inst, new ScriptError(ScriptError.Kind.BUDGET, "Memory limit exceeded: this script holds more than "
+                    + dev.newyear.countdown.ai.script.lang.HeapMeter.human(cap) + " of data (state, variables, closures). Keep fewer/smaller values", 0, 0), "heap check");
+        }
     }
 
     /** 저장된 상태의 참조 문자열을 핸들로 되돌린다. */
@@ -157,6 +304,10 @@ public final class ScriptManager {
                 return new EntityRef(UUID.fromString(parts[1]), parts.length > 2 ? parts[2] : "?");
             }
             if (ref.startsWith("quest:")) return new QuestRef(ref.substring(6), false, null);
+            if (ref.startsWith("model:")) {
+                String[] parts = ref.split(":", 3);
+                if (parts.length == 3) return new dev.newyear.countdown.ai.script.api.ModelRef(parts[1], parts[2], null);
+            }
         } catch (IllegalArgumentException ignored) {
             // 손상된 참조는 일반 객체로 남긴다
         }
@@ -178,7 +329,9 @@ public final class ScriptManager {
         if (inst != null) saveState(inst);
         rec.state = end;
         rec.stateReason = reason == null ? "" : reason;
-        cleanup(rec, inst, rollbackAllBlocks);
+        var buildPlan=RuntimeConstruction.plan(rec);
+        if(buildPlan!=null && buildPlan.pending() && rec.id.equals(buildPlan.runnerScriptId)) {buildPlan.status="PAUSED";buildPlan.reason=rec.stateReason;}
+        cleanup(rec, inst, rollbackAllBlocks, end == ScriptRecord.State.STOPPED && "replaced by new version".equals(reason));
         NewYearCountdown.LOGGER.info("[WishAI] script {} ({}) -> {}: {}", rec.id, rec.name, end, reason);
         if (rec.wishId != null) eng.wishes().checkWorkDone(rec.wishId);
         return true;
@@ -186,6 +339,18 @@ public final class ScriptManager {
 
     /** 스크립트가 만든 엔티티·임시 블록·HUD·퀘스트·대기 중 UI 를 정리한다. 남기기로 한 것은 남긴다. */
     private void cleanup(ScriptRecord rec, ScriptInstance inst, boolean rollbackAllBlocks) {
+        cleanup(rec, inst, rollbackAllBlocks, false);
+    }
+
+    private void cleanup(ScriptRecord rec, ScriptInstance inst, boolean rollbackAllBlocks, boolean preserveQuests) {
+        eng.extensions().cleanup(rec.id);
+        RuntimeControls.cleanup(rec);
+        RuntimeState.cleanup(rec);
+        removeGoals(rec);
+        rec.edits.clear();
+        // 남기지 않는 부품이 사라지면 모델 기록도 없앤다 (남긴 모델은 그대로 — 엔티티로 세계에 남는다)
+        rec.models.removeIf(m -> m.parts.stream().noneMatch(p -> p.entity != null && rec.keptEntities.contains(p.entity)));
+        for (ScriptRecord.ModelSpec m : rec.models) m.follow = null;
         for (String u : new ArrayList<>(rec.entities)) {
             if (rec.keptEntities.contains(u)) continue;
             try {
@@ -198,15 +363,35 @@ public final class ScriptManager {
         eng.ui().clearStatusesOfScript(rec.id);
         eng.ui().cancelInteractionsOfScript(rec.id);
         for (Quest q : eng.state().quests.values()) {
-            if (rec.id.equals(q.scriptId) && q.state == Quest.State.ACTIVE) {
+            if (!preserveQuests && !q.preparing && rec.id.equals(q.scriptId) && q.state == Quest.State.ACTIVE) {
                 eng.quests().finish(q.id, Quest.State.CANCELLED, "능력이 사라져 퀘스트가 멈췄다");
             }
         }
         pending.removeIf(p -> p.scriptId.equals(rec.id));
     }
 
+    /** 블록 되돌리기 결과. conflicts: 그 사이 다른 누가 바꿔서 건드리지 않은 칸 (rec.blockConflicts 에 남는다). */
+    public record RollbackReport(int reverted, int conflicts, int protectedBlocks, List<String> samples) {
+        public String describe() {
+            String s = "되돌림 " + reverted + "칸";
+            if (conflicts > 0) s += ", 그 사이 바뀐 칸 " + conflicts + "개는 그대로 둠" + (samples.isEmpty() ? "" : " (" + String.join(", ", samples) + ")");
+            if (protectedBlocks > 0) s += ", 내용물이 있는 블록 " + protectedBlocks + "개는 보호됨";
+            return s;
+        }
+    }
+
+    private enum Revert { DONE, CONFLICT, PROTECTED, GONE }
+
     /** onlyTemporary=true 면 임시 블록만, 아니면 이 스크립트가 바꾼 모든 블록을 원래대로. */
-    public void revertBlocks(ScriptRecord rec, boolean onlyTemporary) {
+    public RollbackReport revertBlocks(ScriptRecord rec, boolean onlyTemporary) {
+        return revertBlocks(rec, onlyTemporary, false);
+    }
+
+    /**
+     * force=true (관리자 전용): 그 사이 바뀐 칸도 되돌린다. 단, 상자·표지판처럼 내용물이 있는 블록은 절대 덮어쓰지 않는다.
+     * force 면 이전에 충돌로 남겨 둔 칸(rec.blockConflicts)도 함께 처리한다.
+     */
+    public RollbackReport revertBlocks(ScriptRecord rec, boolean onlyTemporary, boolean force) {
         Iterator<ScriptRecord.BlockChange> it = rec.blocks.iterator();
         List<ScriptRecord.BlockChange> rev = new ArrayList<>();
         while (it.hasNext()) {
@@ -215,19 +400,41 @@ public final class ScriptManager {
             rev.add(b);
             it.remove();
         }
+        if (force) {
+            rev.addAll(0, rec.blockConflicts);
+            rec.blockConflicts.clear();
+        }
         java.util.Collections.reverse(rev);
-        for (ScriptRecord.BlockChange b : rev) revertOne(b);
+        int done = 0, conflicts = 0, prot = 0;
+        List<String> samples = new ArrayList<>();
+        for (ScriptRecord.BlockChange b : rev) {
+            Revert r = revertOne(b, force);
+            if (r == Revert.DONE) done++;
+            if (r != Revert.CONFLICT && r != Revert.PROTECTED) continue;
+            if (rec.blockConflicts.size() < 4096) rec.blockConflicts.add(b);
+            if (r == Revert.PROTECTED) prot++;
+            else conflicts++;
+            if (samples.size() < 4) samples.add(b.x + "," + b.y + "," + b.z);
+        }
+        if (conflicts + prot > 0) NewYearCountdown.LOGGER.info("[WishAI] script {} rollback: {} reverted, {} changed by others, {} protected", rec.id, done, conflicts, prot);
+        return new RollbackReport(done, conflicts, prot, samples);
     }
 
-    private void revertOne(ScriptRecord.BlockChange b) {
+    private Revert revertOne(ScriptRecord.BlockChange b, boolean force) {
         ServerLevel l = McUtil.level(eng.server(), b.dimension);
-        if (l == null) return;
+        if (l == null) return Revert.GONE;
         BlockPos p = new BlockPos(b.x, b.y, b.z);
         BlockState cur = l.getBlockState(p);
-        // 그 사이 플레이어가 바꿨다면 건드리지 않는다
-        if (b.after != null && !McUtil.blockString(cur).equals(b.after)) return;
         BlockState before = McUtil.parseBlockString(b.before);
-        if (before != null) l.setBlock(p, before, 3);
+        if (before == null) return Revert.GONE;
+        if (McUtil.blockString(cur).equals(b.before)) return Revert.DONE;     // 이미 원래대로
+        // 그 사이 플레이어가 바꿨다면 건드리지 않는다 (force 여도 내용물이 있는 블록은 보호)
+        if (b.after != null && !McUtil.blockString(cur).equals(b.after)) {
+            if (!force) return Revert.CONFLICT;
+            if (cur.hasBlockEntity()) return Revert.PROTECTED;
+        }
+        l.setBlock(p, before, 3);
+        return Revert.DONE;
     }
 
     public void scheduleRevert(String scriptId, ScriptRecord.BlockChange b, long ticks) {
@@ -245,6 +452,9 @@ public final class ScriptManager {
             ScriptInstance inst = live.remove(id);
             saveState(inst);
             inst.rec.state = ScriptRecord.State.SUSPENDED;
+            RuntimeControls.cleanup(inst.rec);
+            RuntimeState.suspend(inst.rec);
+            eng.extensions().cleanup(inst.rec.id);
             inst.rec.stateReason = reason;
             n++;
         }
@@ -266,11 +476,18 @@ public final class ScriptManager {
             String s = el.toString();
             if (s.length() > AiConfig.get().scriptStateMaxBytes) {
                 inst.rec.lastError = "state too large (" + s.length() + " bytes); not saved";
-                return;
+            } else {
+                inst.rec.stateJson = el.isJsonObject() ? el.getAsJsonObject() : new JsonObject();
             }
-            inst.rec.stateJson = el.isJsonObject() ? el.getAsJsonObject() : new JsonObject();
         } catch (ScriptError e) {
             inst.rec.lastError = "state not saved: " + e.getMessage();
+        }
+        if (AiConfig.get().scriptPersistClosures && !inst.dry) {
+            try {
+                inst.rec.continuations = Continuations.save(inst, eng.tick(), codecHost).json();
+            } catch (RuntimeException e) {
+                NewYearCountdown.LOGGER.warn("[WishAI] could not save continuations of {}", inst.rec.id, e);
+            }
         }
     }
 
@@ -297,16 +514,21 @@ public final class ScriptManager {
         inst.in.budget = b;
         b.reset();
         try {
-            return inst.in.invoke(fn, args);
+            Object result = inst.in.invoke(fn, args);
+            eng.quests().publishPrepared(inst);
+            return result;
         } catch (ScriptError e) {
+            eng.quests().rollbackPreparation(inst);
             onError(inst, e, what);
         } catch (RuntimeException e) {
+            eng.quests().rollbackPreparation(inst);
             NewYearCountdown.LOGGER.warn("[WishAI] script {} internal error in {}", inst.rec.id, what, e);
             onError(inst, new ScriptError(ScriptError.Kind.RUNTIME, "internal error: " + e.getClass().getSimpleName(), 0, 0), what);
         } finally {
             stepsThisTick += b.steps();
             inst.rec.steps += b.steps();
             inst.rec.runs++;
+            if (inst.rec.state.live() && (++inst.runsSinceHeap >= 16 || b.alloc() > 2_000)) checkHeap(inst);
         }
         return null;
     }
@@ -373,6 +595,40 @@ public final class ScriptManager {
         }
     }
 
+    private final java.util.Set<String> intercepting = new java.util.HashSet<>();
+
+    /** Synchronous before-events. Only a successful handler return can change the operation. */
+    public JsObject intercept(String type, JsObject payload, Ctx ctx, Object affected) {
+        JsObject result = new JsObject().put("cancel", false);
+        if (payload.get("amount") instanceof Number n) result.put("amount", n.doubleValue());
+        if (!eng.aiEnabled() || !hasListeners(type) || !intercepting.add(type)) return result;
+        try {
+            for (ScriptInstance inst : live.values().stream().sorted(java.util.Comparator.comparing(x -> x.rec.id)).toList()) {
+                List<ScriptInstance.Listener> ls = inst.listeners.get(type);
+                if (ls == null) continue;
+                try {
+                    if (affected instanceof PlayerRef p) Policy.checkAffect(inst.in, inst, p, "intercept " + type + " for", true);
+                    else if (affected instanceof EntityRef e) {
+                        if (e.live() == null) continue;
+                        Policy.checkControl(inst.in, inst, e);
+                        Policy.checkRange(inst.in, inst, new double[]{e.live().getX(),e.live().getY(),e.live().getZ()});
+                    }
+                } catch (RuntimeException denied) { continue; }
+                for (ScriptInstance.Listener listener : new ArrayList<>(ls)) {
+                    if (!matches(listener.filter(),ctx)) continue;
+                    JsObject event = new JsObject();
+                    event.map.putAll(payload.map);
+                    if (result.get("amount") instanceof Number n) event.put("amount", n.doubleValue());
+                    if (listener.once()) { ls.remove(listener); indexDirty = true; }
+                    Object answer = invoke(inst,listener.fn(),List.of(event),"on('" + type + "')");
+                    InterceptDecision.merge(result,answer);
+                    if (Boolean.TRUE.equals(result.get("cancel"))) return result;
+                }
+            }
+        } finally { intercepting.remove(type); }
+        return result;
+    }
+
     private static boolean matches(JsObject f, Ctx ctx) {
         if (f == null) return true;
         Object p = f.get("player");
@@ -420,8 +676,10 @@ public final class ScriptManager {
     public void stopIfIdleOneShot(ScriptInstance inst) {
         ScriptRecord r = inst.rec;
         if (!r.keepEntitiesDefault || r.lasting || !r.state.live()) return;
+        if (!r.edits.isEmpty()) return;
         if (inst.listenerCount() > 0 || inst.activeTimers() > 0 || !r.behaviours.isEmpty() || !r.timers.isEmpty()) return;
         if (eng.ui().hasPendingForScript(r.id)) return;
+        if (RuntimeState.section(r,"projectiles").size() > 0 || RuntimeState.section(r,"controls").size() > 0 || RuntimeState.section(r,"panels").size() > 0) return;
         requestStop(r.id, "one-shot finished");
     }
 
@@ -456,7 +714,7 @@ public final class ScriptManager {
                 if (p.due > now) continue;
                 it.remove();
                 ScriptRecord rec = eng.state().scripts.get(p.scriptId);
-                if (p.block != null && rec != null && rec.blocks.remove(p.block)) revertOne(p.block);
+                if (p.block != null && rec != null && rec.blocks.remove(p.block) && revertOne(p.block, false) == Revert.CONFLICT) rec.blockConflicts.add(p.block);
                 if (p.entity != null) {
                     Entity e = new EntityRef(p.entity, "?").live();
                     if (e != null) e.discard();
@@ -511,6 +769,16 @@ public final class ScriptManager {
             }
         }
 
+        // 큰 세계 변경: 스크립트마다 틱당 한도, 모두 합쳐 서버 전체 한도 안에서
+        if(now%20==0) for(ScriptInstance inst:new ArrayList<>(live.values())) RuntimeConstruction.tick(inst);
+        int edits = AiConfig.get().globalBlocksPerTick;
+        for (ScriptInstance inst : new ArrayList<>(live.values())) {
+            if (inst.rec.edits.isEmpty()) continue;
+            if (edits <= 0) break;
+            edits -= WorldEdits.tick(this, inst, Math.min(AiConfig.get().scriptBlocksPerTick, edits));
+            stopIfIdleOneShot(inst);
+        }
+        if (now % 2 == 0) tickModels();
         if (now % 10 == 0) {
             tickBehaviours(now);
             tickRegionsAndMoves();
@@ -567,6 +835,28 @@ public final class ScriptManager {
                         if (dist > 1.5) m.getNavigation().moveTo(target[0], target[1], target[2], 1.0);
                     }
                     default -> { }
+                }
+            }
+        }
+    }
+
+    /** 따라다니는 모델: 대상 위치(+오프셋)로 부품을 미끄러뜨리고, turn 이면 대상이 보는 쪽으로 돈다. */
+    private void tickModels() {
+        for (ScriptInstance inst : live.values()) {
+            for (ScriptRecord.ModelSpec m : inst.rec.models) {
+                if (m.follow == null) continue;
+                Entity t = null;
+                try {
+                    UUID u = UUID.fromString(m.follow.substring(7));
+                    t = m.follow.startsWith("player:") ? eng.player(u) : new EntityRef(u, "?").live();
+                } catch (IllegalArgumentException | StringIndexOutOfBoundsException ignored) { }
+                if (t == null || !McUtil.dimId(t.level()).equals(m.dimension)) continue;
+                double[] off = m.followOffset == null ? new double[]{0, 0, 0} : m.followOffset;
+                double[] to = {t.getX() + off[0], t.getY() + off[1], t.getZ() + off[2]};
+                if (m.origin != null && Math.abs(to[0] - m.origin[0]) + Math.abs(to[1] - m.origin[1]) + Math.abs(to[2] - m.origin[2]) > 0.02) Models.moveTo(m, to, 3);
+                if (m.followTurn && Math.abs(net.minecraft.util.Mth.wrapDegrees(t.getYRot() - m.yaw)) > 2) {
+                    m.yaw = t.getYRot();
+                    Models.refresh(m, 3);
                 }
             }
         }
@@ -630,9 +920,21 @@ public final class ScriptManager {
 
     /** 언로드 상태였던 엔티티가 나중에 로드되면, 이미 끝난 스크립트의 것인지 확인해 치운다. */
     public void onEntityLoad(Entity e) {
+        // 목표를 받은 세계의 몹: 그 스크립트가 살아 있으면 목표를 다시 붙이고, 끝났으면 표시만 지운다 (몹은 건드리지 않는다)
+        if (e instanceof Mob m) {
+            for (String tag : new ArrayList<>(e.entityTags())) {
+                if (!tag.startsWith(GOAL_TAG)) continue;
+                ScriptInstance inst = live.get(tag.substring(GOAL_TAG.length()));
+                if (inst == null) e.removeTag(tag);
+            }
+            String u = e.getUUID().toString();
+            for (ScriptInstance inst : live.values()) {
+                for (ScriptRecord.GoalSpec g : inst.rec.goals) if (g.entity.equals(u)) Goals.apply(m, inst.rec.id, g);
+            }
+        }
         if (!e.entityTags().contains("wishai")) return;
         for (String tag : e.entityTags()) {
-            if (!tag.startsWith("wishai_") || tag.equals(ScriptApi.FX_TAG)) continue;
+            if (!tag.startsWith("wishai_") || tag.equals(ScriptApi.FX_TAG) || tag.startsWith(GOAL_TAG)) continue;
             String sid = tag.substring(7);
             ScriptRecord rec = eng.state().scripts.get(sid);
             String u = e.getUUID().toString();

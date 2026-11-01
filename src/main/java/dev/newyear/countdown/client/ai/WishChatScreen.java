@@ -56,8 +56,11 @@ public class WishChatScreen extends Screen {
     }
 
     private void updateHint() {
+        input.setEditable(!AiClientState.thinking);
         AiClientState.Interaction it = AiClientState.firstInteraction();
-        if (it != null && it.kind.equals("input")) {
+        if (AiClientState.thinking) {
+            input.setHint(Component.literal("새벽별이 대답을 준비하고 있어요…").withColor(WishUi.TEXT_FAINT));
+        } else if (it != null && it.kind.equals("input")) {
             input.setHint(Component.literal(it.placeholder.isEmpty() ? "답을 적어라…" : it.placeholder).withColor(WishUi.TEXT_FAINT));
         } else if (AiClientState.wishId.isEmpty() || AiClientState.wishState.isEmpty() || isTerminal(AiClientState.wishState)) {
             input.setHint(Component.literal("새벽별에게 소원을 빌어 보세요…").withColor(WishUi.TEXT_FAINT));
@@ -81,15 +84,15 @@ public class WishChatScreen extends Screen {
     }
 
     private void submit() {
+        if (AiClientState.thinking) return;
         String t = input.getValue().strip();
         if (t.isEmpty()) return;
         AiClientState.Interaction it = AiClientState.firstInteraction();
         if (it != null && it.kind.equals("input")) {
-            AiClientState.answer(it, 0, t);
-            AiClientState.lines.add(new AiClientState.Line("player", t, ""));
+            if (!AiClientState.answer(it, 0, t)) return;
         } else {
             if (isTerminal(AiClientState.wishState)) AiClientState.newWish();
-            AiClientState.sendChat(t);
+            if (!AiClientState.sendChat(t)) return;
         }
         input.setValue("");
         scroll = 0;
@@ -253,7 +256,7 @@ public class WishChatScreen extends Screen {
 
         // 빠른 답
         int qy = areaBottom + 2;
-        if (quickH > 0) {
+        if (quickH > 0 && !AiClientState.thinking) {
             int qx = x0 + 12;
             for (String q : AiClientState.quick) {
                 int w = font.width(q) + 10;
@@ -282,7 +285,7 @@ public class WishChatScreen extends Screen {
         input.setWidth(fieldW - 4);
         boolean answering = it != null && it.kind.equals("input");
         int sendX = x1 - 12 - 50;
-        WishUi.button(g, font, answering ? "답하기" : "보내기", sendX, inputY - 3, 50, 16, mx, my, !input.getValue().isBlank(), WishUi.GOLD, open);
+        WishUi.button(g, font, AiClientState.thinking ? "준비 중" : answering ? "답하기" : "보내기", sendX, inputY - 3, 50, 16, mx, my, !AiClientState.thinking && !input.getValue().isBlank(), WishUi.GOLD, open);
         hits.add(new Hit(sendX, inputY - 3, 50, 16, this::submit));
         String count = input.getValue().length() + "/300";
         g.text(font, count, x0 + 12, inputY + 16, WishUi.textAlpha(WishUi.TEXT_FAINT, open), false);
@@ -290,7 +293,7 @@ public class WishChatScreen extends Screen {
         // 아래 버튼
         int by = bottom - 22;
         int bw = 70;
-        WishUi.button(g, font, "새 소원", x0 + 12, by, bw, 14, mx, my, true, WishUi.MYSTIC, open);
+        WishUi.button(g, font, "새 소원", x0 + 12, by, bw, 14, mx, my, !AiClientState.thinking, WishUi.MYSTIC, open);
         hits.add(new Hit(x0 + 12, by, bw, 14, () -> {
             AiClientState.newWish();
             updateHint();
@@ -327,7 +330,10 @@ public class WishChatScreen extends Screen {
         };
         g.text(font, "✦ " + head, cx0 + 6, y + 4, WishUi.textAlpha(accent, open), false);
         long rem = AiClientState.remaining(it.deadlineLocal);
-        if (rem >= 0) {
+        if (AiClientState.thinking) {
+            String waiting = "대답 후 선택 가능";
+            g.text(font, waiting, cx1 - 6 - font.width(waiting), y + 4, WishUi.textAlpha(WishUi.TEXT_DIM, open), false);
+        } else if (rem >= 0) {
             String tm = WishUi.time(rem);
             g.text(font, tm, cx1 - 6 - font.width(tm), y + 4, WishUi.textAlpha(rem < 10_000 ? WishUi.DANGER : WishUi.TEXT_DIM, open), false);
             float frac = it.totalMs > 0 ? (float) rem / it.totalMs : 0;
@@ -344,11 +350,10 @@ public class WishChatScreen extends Screen {
                 int colW = (cx1 - cx0 - 20) / 2;
                 for (int i = 0; i < it.options.size(); i++) {
                     int bx = cx0 + 8 + (i % 2) * (colW + 4), by = ty + 2 + (i / 2) * 17;
-                    WishUi.button(g, font, it.options.get(i), bx, by, colW, 15, mx, my, true, accent, open);
+                    WishUi.button(g, font, it.options.get(i), bx, by, colW, 15, mx, my, !AiClientState.thinking, accent, open);
                     int idx = i;
                     hits.add(new Hit(bx, by, colW, 15, () -> {
                         AiClientState.answer(it, idx, it.options.get(idx));
-                        AiClientState.lines.add(new AiClientState.Line("player", "[" + it.options.get(idx) + "]", ""));
                     }));
                 }
             }
@@ -357,15 +362,13 @@ public class WishChatScreen extends Screen {
                 int bx = (cx0 + cx1) / 2 - bw - 4, by = ty + 3;
                 String yes = it.options.isEmpty() ? "수락" : it.options.get(0);
                 String no = it.options.size() > 1 ? it.options.get(1) : "거절";
-                WishUi.button(g, font, yes, bx, by, bw, 15, mx, my, true, WishUi.SUCCESS, open);
-                WishUi.button(g, font, no, bx + bw + 8, by, bw, 15, mx, my, true, WishUi.DANGER, open);
+                WishUi.button(g, font, yes, bx, by, bw, 15, mx, my, !AiClientState.thinking, WishUi.SUCCESS, open);
+                WishUi.button(g, font, no, bx + bw + 8, by, bw, 15, mx, my, !AiClientState.thinking, WishUi.DANGER, open);
                 hits.add(new Hit(bx, by, bw, 15, () -> {
                     AiClientState.answer(it, 0, yes);
-                    AiClientState.lines.add(new AiClientState.Line("player", "[" + yes + "]", ""));
                 }));
                 hits.add(new Hit(bx + bw + 8, by, bw, 15, () -> {
                     AiClientState.answer(it, 1, no);
-                    AiClientState.lines.add(new AiClientState.Line("player", "[" + no + "]", ""));
                 }));
                 if (it.kind.equals("contract") && rem < 0) {
                     String hint = "말로 조건을 바꾸자고 해도 된다";

@@ -54,13 +54,15 @@ public final class WishManager {
         AiConfig cfg = AiConfig.get();
         String text = sanitize(raw == null ? "" : raw, cfg.maxMessageLength);
         if (text.isEmpty()) return;
+        if (eng.agent().rejectWhileBusy(p)) return;
         String uuid = p.getUUID().toString();
         AiState.PlayerProfile prof = eng.state().profile(uuid, p.getGameProfile().name());
         // 한도·예산·키 확인을 소원 기록을 만들기 전에 한다 (거절된 소원이 '분석 중'으로 남지 않게)
-        if (eng.agent().busy(prof.openWishId == null ? "" : prof.openWishId) == false) {
+        {
             String refusal = eng.agent().gate(TurnRequest.player(null, p.getUUID(), text), p);
             if (refusal != null) {
                 eng.ui().spiritLine(p, prof.openWishId, refusal, "sad");
+                eng.ui().thinking(p, prof.openWishId, false, "");
                 return;
             }
         }
@@ -68,16 +70,26 @@ public final class WishManager {
         Wish w = null;
         if (wishId != null && !wishId.isEmpty()) {
             Wish c = eng.state().wishes.get(wishId);
-            if (c != null && uuid.equals(c.player) && c.state.conversational()) w = c;
+            if (c != null && uuid.equals(c.player) && canContinue(c)) w = c;
         }
         // 대화 중인 소원만 이어 간다. 진행 중(퀘스트·승인 대기)인 소원이 있어도 새 말은 새 소원으로 시작한다
         // (진행 중인 소원과 퀘스트는 컨텍스트로 AI 에게 함께 전달된다).
         if (w == null && !"lantern".equals(origin)) {
             Wish open = openWishOf(p);
-            if (open != null && open.state.conversational()) w = open;
+            if (open != null && canContinue(open)) w = open;
         }
         boolean fresh = w == null;
         if (fresh) {
+            // 새 소원 쿨타임 (대화를 이어 가는 말은 막지 않는다)
+            long now = System.currentTimeMillis();
+            long left = prof.wishCooldownLeft(now, cfg.wishCooldownSeconds);
+            if (left > 0) {
+                long secs = (left + 999) / 1000;
+                eng.ui().spiritLine(p, prof.openWishId, "소원은 숨을 고른 뒤에야 다시 빌 수 있단다. " + secs + "초 뒤에 다시 오거라. (소원 쿨타임)", "stern");
+                eng.ui().thinking(p, prof.openWishId, false, "");
+                return;
+            }
+            prof.lastWishAt = now;
             w = new Wish();
             w.id = "w-" + UUID.randomUUID().toString().substring(0, 8);
             w.player = uuid;
@@ -124,10 +136,11 @@ public final class WishManager {
             if (kind.equals("contract")) {
                 if (timedOut || w.contract == null) return;
                 if (index == 0) {
+                    if(w.buildPlan!=null) w.buildPlan.accept(w.contract.buildPlanId,w.contract.buildPlanRevision);
                     w.contract.accepted = true;
                     transition(w, Wish.State.PREPARING, "contract accepted");
                     msg = "[CONTRACT ACCEPTED] The player accepted your contract (terms: " + w.contract.terms + "; reward: " + w.contract.reward
-                            + "). Now make it real: create the quest UI and a script that tracks the condition and gives the reward when met.";
+                            + "). First implement the checkable conditions and reward path: create_quest reserves a hidden draft ID, then validate and activate its tracker script. The quest is shown only after the tracker starts successfully. Do not finish with only a quest description.";
                 } else {
                     w.contract.declined = true;
                     transition(w, Wish.State.NEGOTIATING, "contract declined");
@@ -141,12 +154,25 @@ public final class WishManager {
 
     // ---------------------------------------------------------------- 상태 전이
 
+    private static boolean canContinue(Wish w) {
+        return w.state.conversational() || (w.buildPlan!=null && !w.state.terminal());
+    }
+
     public void transition(Wish w, Wish.State to, String reason) {
-        if (w.state == to) return;
-        if (w.state.terminal() && to != w.state) {
-            // 끝난 소원은 다시 열지 않는다 (새 소원으로 이어 간다)
+        if ((to == Wish.State.ACTIVE || to == Wish.State.COMPLETED) && eng.quests().hasPreparing(w.id)) {
+            to = Wish.State.PREPARING;
+            reason = "quest condition tracker is not ready";
+        }
+        if (w.state == to || w.state.terminal()) return;
+        if(w.buildPlan!=null && w.buildPlan.unfinished() && (to==Wish.State.COMPLETED
+                || (to==Wish.State.FAILED && w.buildPlan.requirementsMet(eng.state().quests.get(w.buildPlan.questId))))) {
+            w.buildPlan.reason=reason==null ? "확정된 설계의 시공을 기다립니다." : reason;
+            if(to==Wish.State.FAILED) w.buildPlan.status="WAITING_SITE";
             return;
         }
+        if(to==Wish.State.CANCELLED && w.buildPlan!=null){w.buildPlan.status="CANCELLED";w.buildPlan.reason=reason;}
+        if(to==Wish.State.FAILED && w.buildPlan!=null){w.buildPlan.status="FAILED";w.buildPlan.reason=reason;}
+        if(to==Wish.State.REJECTED && w.buildPlan!=null){w.buildPlan.status="REJECTED";w.buildPlan.reason=reason;}
         Wish.State from = w.state;
         w.history.add(new Wish.Transition(from, to, reason, System.currentTimeMillis()));
         while (w.history.size() > 40) w.history.remove(0);
@@ -247,6 +273,7 @@ public final class WishManager {
     public void checkWorkDone(String wishId) {
         Wish w = wishId == null ? null : eng.state().wishes.get(wishId);
         if (w == null || w.state != Wish.State.ACTIVE) return;
+        if(w.buildPlan!=null && w.buildPlan.unfinished()) return;
         if (eng.agent().busy(w.id)) return;
         for (String sid : w.scriptIds) {
             var r = eng.state().scripts.get(sid);
@@ -273,7 +300,9 @@ public final class WishManager {
         Wish w = eng.state().wishes.get(wishId);
         if (w == null || w.state.terminal()) return;
         if (summary != null && !summary.isEmpty()) w.summary = summary;
+        if(w.buildPlan!=null && w.buildPlan.status.equals("COMPLETE")) w.outcome=summary;
         transition(w, Wish.State.COMPLETED, summary == null || summary.isEmpty() ? "fulfilled" : summary);
+        if(w.state!=Wish.State.COMPLETED) return;
         ServerPlayer p = online(w);
         if (p != null) eng.ui().cinematic(p, "소원 성취", clip(w.text, 40), "wish", 4);
     }
@@ -281,6 +310,9 @@ public final class WishManager {
     public void failFromScript(String wishId, String reason) {
         Wish w = eng.state().wishes.get(wishId);
         if (w == null || w.state.terminal()) return;
+        if(w.buildPlan!=null && w.buildPlan.pending() && w.buildPlan.requirementsMet(eng.state().quests.get(w.buildPlan.questId))){
+            w.buildPlan.reason=reason;w.buildPlan.status="WAITING_SITE";return;
+        }
         w.outcome = reason;
         transition(w, Wish.State.FAILED, reason);
     }

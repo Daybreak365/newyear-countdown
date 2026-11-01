@@ -11,6 +11,7 @@ import dev.newyear.countdown.ai.openai.OpenAiClient;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * 도구 호출 루프. 모델이 함수를 부르면 실행해 결과를 돌려주고, 최종 구조화 응답이 나올 때까지 반복한다.
@@ -46,12 +47,18 @@ public final class AgentRunner {
 
     public Result run(Request req, ToolExecutor tools, OpenAiClient.CancelToken cancel, Consumer<ApiResponse.Usage> onUsage,
                       Consumer<String> onStatus) throws ApiException {
+        return run(req, tools, cancel, onUsage, onStatus, null);
+    }
+
+    public Result run(Request req, ToolExecutor tools, OpenAiClient.CancelToken cancel, Consumer<ApiResponse.Usage> onUsage,
+                      Consumer<String> onStatus, Supplier<String> unfinishedWork) throws ApiException {
         Result result = new Result();
         List<JsonObject> context = new ArrayList<>(req.input());
         List<JsonObject> pending = new ArrayList<>(req.input());
         String previousId = null;
         int totalCalls = 0;
         int repairs = 0;
+        int implementationRepairs = 0;
         boolean toolsAllowed = true;
 
         while (true) {
@@ -93,6 +100,18 @@ public final class AgentRunner {
                     pending.add(nudge);
                 }
                 continue;
+            }
+
+            // Give the model a bounded opportunity to finish required implementation before narrating success.
+            if (unfinishedWork != null && toolsAllowed && totalCalls < req.maxCalls() && implementationRepairs < 2) {
+                String missing = unfinishedWork.get();
+                if (missing != null && !missing.isBlank()) {
+                    implementationRepairs++;
+                    JsonObject nudge = userMessage("[system] " + missing);
+                    context.add(nudge);
+                    pending.add(nudge);
+                    continue;
+                }
             }
 
             // 최종 응답

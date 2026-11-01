@@ -89,7 +89,7 @@ public final class AutonomyManager {
         int n = 0;
         for (MemoryRecord r : eng.memory().all()) {
             if (r.archived) continue;
-            if (uuid.equals(r.owner) || r.scope == MemoryRecord.Scope.WORLD) n++;
+            if (r.visibleTo(uuid)) n++;
             if (n >= min) return true;
         }
         return false;
@@ -176,7 +176,7 @@ public final class AutonomyManager {
             for (MemoryRecord r : places) {
                 String key = p.getUUID() + "|" + r.id;
                 boolean in = (r.dimension == null || r.dimension.equals(dim))
-                        && (r.scope == MemoryRecord.Scope.WORLD || p.getUUID().toString().equals(r.owner))
+                        && r.visibleTo(p.getUUID().toString())
                         && sq(p.getX() - r.pos[0]) + sq(p.getZ() - r.pos[2]) <= 144 && Math.abs(p.getY() - r.pos[1]) <= 16;
                 boolean was = insidePlace.contains(key);
                 if (in == was) continue;

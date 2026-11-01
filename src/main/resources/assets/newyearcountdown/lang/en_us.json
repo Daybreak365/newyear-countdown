@@ -390,5 +390,12 @@
   "curling.newyearcountdown.board.turn": "%s to throw",
   "curling.newyearcountdown.sweep": "Hurry hard!",
   "key.newyearcountdown.wish_chat": "Wish dialogue (Dawn Star)",
-  "key.newyearcountdown.wish_hud": "Collapse/expand wish HUD"
+  "key.newyearcountdown.wish_hud": "Collapse/expand wish HUD",
+  "key.newyearcountdown.wish_admin": "Wish AI admin panel (operators)",
+  "key.category.newyearcountdown.abilities": "Dawn Star abilities",
+  "key.newyearcountdown.ability_1": "Ability slot 1",
+  "key.newyearcountdown.ability_2": "Ability slot 2",
+  "key.newyearcountdown.ability_3": "Ability slot 3",
+  "key.newyearcountdown.ability_4": "Ability slot 4",
+  "gui.newyearcountdown.ability_unbound": "Set ability slot %s in Controls"
 }

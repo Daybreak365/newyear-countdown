@@ -34,6 +34,8 @@ public final class Wish {
         public boolean declined;
         public long proposedAt;
         public int revision;
+        public String buildPlanId;
+        public int buildPlanRevision;
     }
 
     public static final class Transition {
@@ -72,6 +74,10 @@ public final class Wish {
     /** 다른 플레이어 동의 (uuid). */
     public List<String> consents = new ArrayList<>();
     public Contract contract;
+    public dev.newyear.countdown.ai.script.BuildPlan buildPlan;
+    /** Last successful preview delivery and latest attempt, including fixed world bounds. */
+    public com.google.gson.JsonObject lastBuildPreview;
+    public com.google.gson.JsonObject lastBuildPreviewAttempt;
     public List<Transition> history = new ArrayList<>();
     public int turns;
     public int failures;

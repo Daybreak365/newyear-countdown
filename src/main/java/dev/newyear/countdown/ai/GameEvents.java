@@ -112,6 +112,12 @@ public final class GameEvents {
         });
 
         UseItemCallback.EVENT.register((player, level, hand) -> {
+            if (!level.isClientSide() && player instanceof ServerPlayer sp && wants("before_item_use")) {
+                ItemStack item = player.getItemInHand(hand);
+                JsObject result = scripts().intercept("before_item_use", new JsObject().put("player",PlayerRef.of(sp)).put("item",McUtil.itemInfo(item)).put("hand",hand.name().toLowerCase()),
+                    new ScriptManager.Ctx(sp.getUUID(),null,McUtil.itemId(item),null,null),PlayerRef.of(sp));
+                if (Boolean.TRUE.equals(result.get("cancel"))) return InteractionResult.FAIL;
+            }
             if (level.isClientSide() || !(player instanceof ServerPlayer sp) || !wants("item_use")) return InteractionResult.PASS;
             ItemStack st = player.getItemInHand(hand);
             scripts().emit("item_use", new JsObject().put("player", PlayerRef.of(sp)).put("item", McUtil.itemInfo(st)).put("hand", hand.name().toLowerCase()),
@@ -129,11 +135,24 @@ public final class GameEvents {
         });
 
         AttackEntityCallback.EVENT.register((player, level, hand, entity, hit) -> {
+            if (!level.isClientSide() && player instanceof ServerPlayer sp && wants("before_attack")) {
+                JsObject result = scripts().intercept("before_attack",new JsObject().put("player",PlayerRef.of(sp)).put("target",handle(entity)),
+                    new ScriptManager.Ctx(sp.getUUID(),entity.getUUID(),null,null,null),PlayerRef.of(sp));
+                if (Boolean.TRUE.equals(result.get("cancel"))) return InteractionResult.FAIL;
+            }
             if (level.isClientSide() || !(player instanceof ServerPlayer sp) || !wants("attack")) return InteractionResult.PASS;
             scripts().emit("attack", new JsObject().put("player", PlayerRef.of(sp)).put("target", handle(entity)),
                     new ScriptManager.Ctx(sp.getUUID(), entity.getUUID(), null, null, null));
             return InteractionResult.PASS;
         });
+
+        PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, be) -> {
+            if (!(player instanceof ServerPlayer sp) || !wants("before_block_break")) return true;
+            JsObject result = scripts().intercept("before_block_break",new JsObject().put("player",PlayerRef.of(sp)).put("block",McUtil.blockId(state)).put("pos",Args.posObj(pos.getX(),pos.getY(),pos.getZ())),
+                new ScriptManager.Ctx(sp.getUUID(),null,McUtil.blockId(state),null,null),PlayerRef.of(sp));
+            return !Boolean.TRUE.equals(result.get("cancel"));
+        });
+        ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, amount) -> !dev.newyear.countdown.ai.script.RuntimeHooks.death(entity,source));
 
         PlayerBlockBreakEvents.AFTER.register((level, player, pos, state, be) -> {
             if (level.isClientSide() || !(player instanceof ServerPlayer sp) || !wants("block_break")) return;
@@ -161,11 +180,14 @@ public final class GameEvents {
         });
 
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
+            dev.newyear.countdown.ai.script.RuntimeState.entityLoaded(newPlayer);
+            if (WishEngine.get() != null) dev.newyear.countdown.ai.script.RuntimeControls.sync(newPlayer);
             if (!wants("respawn")) return;
             scripts().emit("respawn", new JsObject().put("player", PlayerRef.of(newPlayer)), ScriptManager.Ctx.player(newPlayer.getUUID()));
         });
 
         ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            dev.newyear.countdown.ai.script.RuntimeState.entityLoaded(entity);
             ScriptManager s = scripts();
             if (s != null) s.onEntityLoad(entity);
         });
@@ -175,6 +197,11 @@ public final class GameEvents {
             WishEngine e = WishEngine.get();
             if (e == null) return;
             e.wishes().playerMessage(ctx.player(), payload.wishId(), payload.text(), "chat");
+        });
+        ServerPlayNetworking.registerGlobalReceiver(AiPackets.AdminC2S.ID, (payload, ctx) -> {
+            WishEngine e = WishEngine.get();
+            if (e == null) return;
+            e.admin().handle(ctx.player(), payload.json());
         });
         ServerPlayNetworking.registerGlobalReceiver(AiPackets.InteractC2S.ID, (payload, ctx) -> {
             WishEngine e = WishEngine.get();
@@ -186,6 +213,7 @@ public final class GameEvents {
             if (e == null) return;
             ServerPlayer p = ctx.player();
             switch (payload.action()) {
+                case "ability_input" -> dev.newyear.countdown.ai.script.RuntimeControls.input(p,payload.arg());
                 case "sync" -> e.ui().syncPlayer(p);
                 case "cancel" -> {
                     Wish w = e.wishes().openWishOf(p);
@@ -195,6 +223,7 @@ public final class GameEvents {
                     }
                 }
                 case "new" -> {
+                    if (e.agent().rejectWhileBusy(p)) break;
                     // 새 소원을 시작하려고 대화창을 비움: 열린 소원 연결만 끊는다
                     var prof = e.state().players.get(p.getUUID().toString());
                     if (prof != null) prof.openWishId = null;

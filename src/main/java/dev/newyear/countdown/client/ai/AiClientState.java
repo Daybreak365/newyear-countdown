@@ -70,6 +70,8 @@ public final class AiClientState {
         public long deadlineLocal = -1, totalMs = -1;
         public String[] pixels;
         public Map<Character, Integer> palette = new LinkedHashMap<>();
+        /** AI 가 그린 동적 텍스처 이름 (있으면 픽셀 아이콘 대신). */
+        public String texture = "";
         public final long since = System.currentTimeMillis();
     }
 
@@ -125,12 +127,15 @@ public final class AiClientState {
     private static int nonce = ThreadLocalRandom.current().nextInt(1, 1_000_000);
 
     public static void clear() {
+        RuntimeHud.clear();
         synced = false;
         wishId = "";
         wishState = "";
         wishText = "";
         lines.clear();
         thinking = false;
+        thinkingLabel = "";
+        thinkingSince = 0;
         quick.clear();
         quests.clear();
         statuses.clear();
@@ -138,22 +143,34 @@ public final class AiClientState {
         toasts.clear();
         cinematic = null;
         history.clear();
+        BlockPreview.clear(null);
+        AdminClient.clear();
+        DynamicTextures.clear();
         unread = 0;
     }
 
     // ---------------------------------------------------------------- 보내기
 
-    public static void sendChat(String text) {
-        if (!ClientPlayNetworking.canSend(AiPackets.ChatC2S.ID)) return;
-        lines.add(new Line("player", text, ""));
+    public static boolean sendChat(String text) {
+        if (thinking || text.isBlank() || !ClientPlayNetworking.canSend(AiPackets.ChatC2S.ID)) return false;
+        beginInput();
         quick.clear();
         ClientPlayNetworking.send(new AiPackets.ChatC2S(wishId == null ? "" : wishId, text, ++nonce));
+        return true;
     }
 
-    public static void answer(Interaction it, int index, String value) {
-        if (it.sent || !ClientPlayNetworking.canSend(AiPackets.InteractC2S.ID)) return;
+    public static boolean answer(Interaction it, int index, String value) {
+        if (thinking || it.sent || !ClientPlayNetworking.canSend(AiPackets.InteractC2S.ID)) return false;
+        beginInput();
         it.sent = true;
         ClientPlayNetworking.send(new AiPackets.InteractC2S(it.id, index, value == null ? "" : value, ++nonce));
+        return true;
+    }
+
+    private static void beginInput() {
+        thinking = true; // lock immediately, including the round trip before the server responds
+        thinkingSince = System.currentTimeMillis();
+        thinkingLabel = "대답을 준비하는 중";
     }
 
     public static void action(String action, String arg) {
@@ -161,6 +178,7 @@ public final class AiClientState {
     }
 
     public static void newWish() {
+        if (thinking) return;
         action("new", "");
         wishId = "";
         wishState = "";
@@ -202,6 +220,7 @@ public final class AiClientState {
         String op = s(o, "op");
         Minecraft mc = Minecraft.getInstance();
         switch (op) {
+            case "runtime_ui" -> RuntimeHud.apply(o);
             case "sync" -> {
                 spiritName = s(o, "spirit");
                 enabled = b(o, "enabled");
@@ -210,6 +229,12 @@ public final class AiClientState {
                 statuses.clear();
                 for (JsonElement e : o.getAsJsonArray("statuses")) putStatus(e.getAsJsonObject());
                 if (o.has("conversation")) applyConversation(o.getAsJsonObject("conversation"));
+                thinking = b(o, "thinking");
+                if (thinking) {
+                    if (thinkingSince == 0) thinkingSince = System.currentTimeMillis();
+                    String activeWish = s(o, "thinkingWishId");
+                    if (!activeWish.isEmpty()) wishId = activeWish;
+                }
                 history.clear();
                 if (o.has("wishes")) for (JsonElement e : o.getAsJsonArray("wishes")) {
                     JsonObject w = e.getAsJsonObject();
@@ -289,12 +314,28 @@ public final class AiClientState {
                     it.deadlineLocal = System.currentTimeMillis() + rem;
                     it.totalMs = rem;
                 }
+                boolean fresh = !interactions.containsKey(it.id);
                 interactions.put(it.id, it);
-                if (mc.player != null) mc.player.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 0.7f, 1.2f);
+                if (fresh && mc.player != null) mc.player.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 0.7f, 1.2f);
                 // 다른 화면이 없으면 바로 대화창을 열어 응답하게 한다
-                if (mc.gui.screen() == null) mc.gui.setScreen(new WishChatScreen());
+                if (fresh && mc.gui.screen() == null) mc.gui.setScreen(new WishChatScreen());
             }
             case "interaction_close" -> interactions.remove(s(o, "id"));
+            case "admin" -> AdminClient.apply(o);
+            case "block_preview" -> {
+                BlockPreview.apply(o);
+                Toast t = new Toast();
+                t.title = "미리보기";
+                t.text = (s(o, "title").isEmpty() ? "블록 " : s(o, "title") + " — ") + l(o, "total", 0) + "칸 (세계는 아직 그대로)";
+                t.kind = "mystic";
+                long secs = l(o, "seconds", 30);
+                t.durationMs = Math.min(8, secs <= 0 ? 8 : secs) * 1000;
+                toasts.add(t);
+                while (toasts.size() > 4) toasts.remove(0);
+            }
+            case "block_preview_clear" -> BlockPreview.clear(s(o, "id"));
+            case "texture" -> DynamicTextures.apply(o);
+            case "texture_remove" -> DynamicTextures.remove(s(o, "id"));
             case "notify" -> {
                 Toast t = new Toast();
                 t.title = s(o, "title");
@@ -322,7 +363,10 @@ public final class AiClientState {
         wishId = wid;
         wishState = s(c, "state");
         wishText = s(c, "text");
-        thinking = b(c, "thinking");
+        if (b(c, "thinking")) {
+            if (!thinking) thinkingSince = System.currentTimeMillis();
+            thinking = true;
+        }
         lines.clear();
         JsonArray arr = c.getAsJsonArray("lines");
         if (arr != null) for (JsonElement e : arr) {
@@ -375,6 +419,7 @@ public final class AiClientState {
         st.desc = s(j, "desc");
         st.kind = s(j, "kind");
         st.counter = s(j, "counter");
+        st.texture = s(j, "texture");
         long rem = l(j, "remainingMs", -1);
         st.deadlineLocal = rem < 0 ? -1 : System.currentTimeMillis() + rem;
         st.totalMs = l(j, "totalMs", -1);

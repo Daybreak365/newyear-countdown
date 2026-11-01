@@ -9,7 +9,10 @@ import java.util.List;
  */
 public final class MemoryRecord {
     public enum Scope {
-        /** 그 플레이어와 AI 사이의 사적인 기억. 다른 플레이어와의 대화에서는 꺼내지 않는다. */
+        /**
+         * 그 플레이어와 AI 사이의 사적인 기억. 다른 플레이어와의 대화에서는 꺼내지 않는다 —
+         * 주인이 {@link #sharedWith} 에 넣은 플레이어만 예외 (공유 기억).
+         */
         PLAYER,
         /** 월드 전체의 공개 사건·장소·규칙. */
         WORLD
@@ -20,6 +23,11 @@ public final class MemoryRecord {
     /** 플레이어 기억이면 UUID 문자열. */
     public String owner;
     public String ownerName;
+    /**
+     * 사적 기억을 함께 볼 수 있는 플레이어 UUID (주인이 직접 공유한 경우만).
+     * 비어 있으면 완전한 비밀, 차 있으면 "주인 + 이 사람들"만 아는 공유 기억이다.
+     */
+    public List<String> sharedWith = new ArrayList<>();
     /**
      * wish, outcome, conversation, event, place, entity, item, ability, rule, script, fact, preference, summary
      */
@@ -46,4 +54,15 @@ public final class MemoryRecord {
     public String hash;
     /** 요약되어 대체된 기억 (검색에서 제외). */
     public boolean archived;
+
+    /** 이 기억을 viewer(플레이어 UUID, null = 아무도 아님)가 볼 수 있는지. */
+    public boolean visibleTo(String viewer) {
+        if (scope == Scope.WORLD) return true;
+        if (viewer == null) return false;
+        return viewer.equals(owner) || (sharedWith != null && sharedWith.contains(viewer));
+    }
+
+    public boolean shared() {
+        return scope == Scope.PLAYER && sharedWith != null && !sharedWith.isEmpty();
+    }
 }

@@ -188,6 +188,15 @@ public final class Policy {
     // ---------------------------------------------------------------- 블록
 
     public static void checkBlock(Interpreter in, ScriptInstance inst, ServerLevel level, BlockPos pos, BlockState newState) {
+        checkBlock(in, inst, level, pos, newState, false);
+    }
+
+    /**
+     * 블록 변경 허가. 빈 공간은 언제나, 자연 지형(돌·흙·모래·광석·자연 나무·물…)은 worldEditMode "natural"(기본)에서 바꿀 수 있다.
+     * 지은 것(가공 블록·놓은 나뭇잎·잎 없는 원목)과 그 바로 옆 칸, 내용물이 있는 블록은 절대 바꾸지 않는다.
+     * gradual=true 는 작업 실행기가 속도를 정하므로 틱당 한도를 세지 않는다.
+     */
+    public static void checkBlock(Interpreter in, ScriptInstance inst, ServerLevel level, BlockPos pos, BlockState newState, boolean gradual) {
         AiConfig cfg = AiConfig.get();
         if (!cfg.allowBlockPlacement) throw deny("Block changes are disabled on this server");
         if (inst.rec.autonomous && !cfg.autonomyMayModifyWorld) throw deny("Autonomous events may not modify blocks on this server");
@@ -196,13 +205,24 @@ public final class Policy {
         if (!level.isLoaded(pos)) throw deny("That position is not loaded");
         if (pos.getY() < level.getMinY() || pos.getY() > level.getMaxY()) throw deny("Outside build height");
         BlockState cur = level.getBlockState(pos);
-        String key = McUtil.dimId(level) + "|" + pos.getX() + "|" + pos.getY() + "|" + pos.getZ();
-        boolean mine = inst.rec.blocks.stream().anyMatch(b -> (b.dimension + "|" + b.x + "|" + b.y + "|" + b.z).equals(key));
+        boolean mine = inst.ownsBlock(McUtil.dimId(level), pos.getX(), pos.getY(), pos.getZ());
+        String mode = cfg.editMode();
         if (!mine) {
             if (cur.hasBlockEntity()) throw deny("Cannot replace blocks with contents (chests, signs, …) at " + pos.toShortString());
             boolean free = cur.isAir() || cur.canBeReplaced() || cur.liquid();
-            if (!free && !cfg.allowReplacingSolidBlocks) {
-                throw deny("Block at " + pos.toShortString() + " is " + McUtil.blockId(cur) + "; scripts may only place blocks in empty space (air, water, grass) or change blocks they placed themselves");
+            if (!free) {
+                switch (mode) {
+                    case "any" -> { }
+                    case "natural" -> {
+                        if (!NaturalBlocks.isNatural(level, pos, cur)) {
+                            throw deny("Block at " + pos.toShortString() + " is " + McUtil.blockId(cur) + ", which looks built by someone; scripts may change empty space and natural terrain only");
+                        }
+                        if (NaturalBlocks.touchesBuild(level, pos, inst)) {
+                            throw deny("Block at " + pos.toShortString() + " touches something built; natural terrain right next to builds is protected");
+                        }
+                    }
+                    default -> throw deny("Block at " + pos.toShortString() + " is " + McUtil.blockId(cur) + "; this server only lets scripts place blocks in empty space (air, water, grass) or change blocks they placed themselves");
+                }
             }
         }
         if (newState.hasBlockEntity()) {
@@ -216,9 +236,15 @@ public final class Policy {
                 || nid.equals("minecraft:barrier") || nid.contains("portal") || nid.equals("minecraft:spawner") || nid.equals("minecraft:jigsaw")) {
             throw deny("Block " + nid + " cannot be placed by scripts");
         }
-        if (!mine && inst.rec.blocks.size() >= cfg.scriptMaxBlocks) throw deny("This script reached its block limit (" + cfg.scriptMaxBlocks + ")");
+        // 번지는 불·용암은 주변 건물을 태울 수 있다
+        if (!mode.equals("any") && (nid.equals("minecraft:lava") || nid.equals("minecraft:fire") || nid.equals("minecraft:soul_fire"))) {
+            throw deny("Block " + nid + " can spread and burn builds; use magma_block, campfire light or particles instead");
+        }
+        int used = inst.dry ? inst.planned.size() : inst.rec.blocks.size();
+        if (!mine && used >= cfg.scriptMaxBlocks * (gradual ? 2 : 1)) throw deny("This script reached its block limit (" + cfg.scriptMaxBlocks + ")");
+        if (gradual) return;
         long tick = WishEngine.get() == null ? 0 : WishEngine.get().tick();
         if (inst.blockTickStamp != tick) { inst.blockTickStamp = tick; inst.blocksThisTick = 0; }
-        if (++inst.blocksThisTick > cfg.scriptBlocksPerTick) throw deny("Too many block changes in one tick (max " + cfg.scriptBlocksPerTick + "); spread them with every()");
+        if (++inst.blocksThisTick > cfg.scriptBlocksPerTick) throw deny("Too many block changes in one tick (max " + cfg.scriptBlocksPerTick + "); use world.box/sphere/terraform for big changes, or spread them with every()");
     }
 }

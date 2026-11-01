@@ -15,6 +15,15 @@ import java.util.Collection;
 /** 점프(서버는 이동 패킷에서 점프를 감지해 jumpFromGround 를 부른다)와 상태 효과 변화를 스크립트 이벤트로 알린다. */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin {
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(method = "hurtServer")
+    private boolean wishai$damage(net.minecraft.server.level.ServerLevel level, net.minecraft.world.damagesource.DamageSource source,
+                                  float amount, com.llamalad7.mixinextras.injector.wrapoperation.Operation<Boolean> original) {
+        var engine=dev.newyear.countdown.ai.WishEngine.get();
+        if(engine==null||!engine.aiEnabled()||!engine.scripts().hasListeners("before_damage"))return original.call(level,source,amount);
+        float changed = dev.newyear.countdown.ai.script.RuntimeHooks.damage((LivingEntity)(Object)this,source,amount);
+        return changed > 0 && original.call(level,source,changed);
+    }
+
     @Inject(method = "jumpFromGround", at = @At("HEAD"))
     private void wishai$jump(CallbackInfo ci) {
         if ((Object) this instanceof ServerPlayer sp) GameEvents.onJump(sp);

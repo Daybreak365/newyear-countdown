@@ -37,9 +37,11 @@ public class NewYearCountdownClient implements ClientModInitializer {
     private static KeyMapping sebae;
     private static KeyMapping wishChat;
     private static KeyMapping wishHud;
+    private static KeyMapping wishAdmin;
 
     @Override
     public void onInitializeClient() {
+        dev.newyear.countdown.client.ai.RuntimeHud.register();
         ClientConfig.load();
 
         ClientPlayNetworking.registerGlobalReceiver(SyncPayload.ID, (payload, context) -> ClientCountdown.onSync(payload));
@@ -131,6 +133,8 @@ public class NewYearCountdownClient implements ClientModInitializer {
         });
         LevelRenderEvents.COLLECT_SUBMITS.register(BellPreview::render);
         LevelRenderEvents.COLLECT_SUBMITS.register(CurlingPreview::render);
+        LevelRenderEvents.COLLECT_SUBMITS.register(dev.newyear.countdown.client.ai.BlockPreview::render);
+        dev.newyear.countdown.client.ai.DynamicTextures.register();
         ClientTickEvents.START_CLIENT_TICK.register(BellSession::tick);
         ClientTickEvents.END_CLIENT_TICK.register(BellSession::follow);
 
@@ -150,11 +154,15 @@ public class NewYearCountdownClient implements ClientModInitializer {
         wishHud = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.newyearcountdown.wish_hud", InputConstants.Type.KEYBOARD, InputConstants.KEY_J,
                 CATEGORY));
+        wishAdmin = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.newyearcountdown.wish_admin", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(),
+                CATEGORY));
         ClientPlayNetworking.registerGlobalReceiver(dev.newyear.countdown.sebae.Sebae.StateS2C.ID, (payload, context) -> {
             if (payload.bowing()) SebaePose.start(payload.player());
             else SebaePose.stop(payload.player());
         });
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            dev.newyear.countdown.client.ai.RuntimeHud.tick(client);
             CountdownTicker.tick(client);
             while (openWishes.consumeClick()) {
                 if (WishBook.size() > 0 && client.gui.screen() == null) client.gui.setScreen(new WishBookScreen());
@@ -169,6 +177,10 @@ public class NewYearCountdownClient implements ClientModInitializer {
             }
             while (wishHud.consumeClick()) {
                 dev.newyear.countdown.client.ai.AiHud.collapsed = !dev.newyear.countdown.client.ai.AiHud.collapsed;
+            }
+            while (wishAdmin.consumeClick()) {
+                // 관리자면 서버가 개요를 보내며 화면이 열린다 (권한은 서버가 판단)
+                if (client.gui.screen() == null && client.player != null) dev.newyear.countdown.client.ai.AdminClient.openRequest();
             }
             dev.newyear.countdown.client.ai.AiHud.openKeyName = wishChat.getTranslatedKeyMessage().getString();
             while (openSettings.consumeClick()) {

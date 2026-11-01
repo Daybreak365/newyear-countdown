@@ -24,6 +24,7 @@ public final class AiHud {
     public static void render(GuiGraphicsExtractor g, DeltaTracker dt) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
+        RuntimeHud.render(g);
         Font f = mc.font;
         int sw = g.guiWidth(), sh = g.guiHeight();
         boolean screenOpen = mc.gui.screen() != null;
@@ -57,7 +58,9 @@ public final class AiHud {
             int accent = WishUi.kindColor(s.kind);
             int rowH = collapsed ? 12 : 14;
             WishUi.softPanel(g, x0, y, x1, y + rowH, accent, 1f);
-            WishUi.pixelIcon(g, s.pixels, s.palette, x0 + 4, y + 2, 9, accent, 1f);
+            DynamicTextures.Tex tex = DynamicTextures.get(s.texture);
+            if (tex != null) g.blit(tex.location, x0 + 4, y + 2, x0 + 13, y + 11, 0f, 1f, 0f, 1f);
+            else WishUi.pixelIcon(g, s.pixels, s.palette, x0 + 4, y + 2, 9, accent, 1f);
             String label = f.plainSubstrByWidth(s.label, w - 52);
             g.text(f, label, x0 + 16, y + 2, WishUi.TEXT, false);
             String right = s.counter == null || s.counter.isEmpty() ? "" : s.counter;

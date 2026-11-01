@@ -11,6 +11,8 @@ public final class StatusEntry {
     /** 픽셀 아이콘 (선택). 각 줄이 한 행이며 palette 의 문자로 색을 고른다. */
     public String[] iconPixels;
     public String iconPalette;
+    /** AI 가 그린 동적 텍스처 이름 (있으면 픽셀 아이콘 대신 그린다). */
+    public String iconTexture;
     /** 0 = 무기한. 엔진 틱 기준. */
     public long expiresTick;
     public long startTick;

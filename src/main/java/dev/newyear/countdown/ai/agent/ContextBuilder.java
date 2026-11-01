@@ -25,6 +25,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** 한 턴에 필요한 최소한의 세계·플레이어·소원·기억 정보를 모은다 (서버 스레드). */
@@ -165,6 +166,18 @@ public final class ContextBuilder {
             quests.add(j);
         }
         o.add("active_quests", quests);
+        JsonArray payments = new JsonArray();
+        var receipts = new ArrayList<>(eng.state().payments.values());
+        receipts.sort(java.util.Comparator.comparingLong((dev.newyear.countdown.ai.script.PaymentLedger.Receipt r) -> r.created).reversed());
+        for (var r : receipts) {
+            if (playerUuid == null || !playerUuid.equals(r.owner)) continue;
+            JsonObject receipt = new JsonObject();
+            receipt.addProperty("id", r.id); receipt.addProperty("item", r.item);
+            receipt.addProperty("paid", r.paid); receipt.addProperty("refunded", r.refunded);
+            payments.add(receipt);
+            if (payments.size() >= 20) break;
+        }
+        o.add("payment_receipts", payments);
         JsonArray statuses = new JsonArray();
         for (StatusEntry s : eng.state().statuses.values()) {
             if (playerUuid != null && !playerUuid.equals(s.owner)) continue;
@@ -182,7 +195,12 @@ public final class ContextBuilder {
         j.addProperty("owner", r.ownerName == null ? "(world)" : r.ownerName);
         j.addProperty("lasting", r.lasting);
         if (!r.description.isEmpty()) j.addProperty("description", r.description);
-        j.addProperty("events", String.join(",", r.subscriptions));
+        var running = eng.scripts().instance(r.id);
+        var events = running == null ? r.subscriptions : running.listeners.entrySet().stream()
+                .filter(e -> !e.getValue().isEmpty()).map(Map.Entry::getKey).sorted().toList();
+        j.addProperty("events", String.join(",", events));
+        if (running != null) j.addProperty("listener_count", running.listenerCount());
+        if (r.runtime != null && r.runtime.has("controls")) j.add("control_bindings", r.runtime.get("controls").deepCopy());
         if (r.durationTicks > 0 && r.state.live()) j.addProperty("seconds_left", Math.max(0, (r.expiresTick - eng.tick()) / 20));
         if (r.errors > 0) j.addProperty("errors", r.errors + " (last: " + r.lastError + ")");
         if (!r.stateReason.isEmpty()) j.addProperty("state_reason", r.stateReason);
@@ -198,21 +216,59 @@ public final class ContextBuilder {
         return j;
     }
 
+    /** 이번 턴의 기억 검색어와 이미 보여 준 기억 (의미 검색 보충용). */
+    public static final class MemoryQuery {
+        public String query = "";
+        public String playerUuid;
+        public final java.util.Set<String> shown = new java.util.HashSet<>();
+    }
+
     /** 기억 + 실제 상태 주석. */
     public static JsonArray memories(WishEngine eng, String query, String playerUuid, int limit) {
+        return memories(eng, query, playerUuid, limit, null);
+    }
+
+    public static JsonArray memories(WishEngine eng, String query, String playerUuid, int limit, MemoryQuery mq) {
         JsonArray arr = new JsonArray();
         long now = System.currentTimeMillis();
         for (MemoryStore.Hit h : eng.memory().search(query, playerUuid, limit, null, true, now)) {
-            arr.add(memoryJson(eng, h.record(), now));
+            arr.add(memoryJson(eng, h.record(), now, playerUuid));
+            if (mq != null) mq.shown.add(h.record().id);
+        }
+        return arr;
+    }
+
+    /** 의미 검색으로 찾은, 키워드 검색 결과에 없던 기억 (유사도가 기준을 넘은 것만). */
+    public static JsonArray semanticMemories(WishEngine eng, MemoryQuery mq, float[] queryVec, int limit) {
+        JsonArray arr = new JsonArray();
+        long now = System.currentTimeMillis();
+        double floor = AiConfig.get().embeddingMinSimilarity;
+        for (MemoryStore.Hit h : eng.memory().search(mq.query, queryVec, mq.playerUuid, limit * 2, null, true, now, mq.shown)) {
+            if (Double.isNaN(h.semantic()) || h.semantic() < floor) continue;
+            JsonObject j = memoryJson(eng, h.record(), now, mq.playerUuid);
+            j.addProperty("similarity", Math.round(h.semantic() * 100) / 100.0);
+            arr.add(j);
+            mq.shown.add(h.record().id);
+            if (arr.size() >= limit) break;
         }
         return arr;
     }
 
     public static JsonObject memoryJson(WishEngine eng, MemoryRecord r, long now) {
+        return memoryJson(eng, r, now, null);
+    }
+
+    /** viewer 는 지금 대화 상대 (공유 기억이면 "누가 너에게 공유했는지"를 붙인다). */
+    public static JsonObject memoryJson(WishEngine eng, MemoryRecord r, long now, String viewer) {
         JsonObject j = new JsonObject();
         j.addProperty("id", r.id);
         j.addProperty("kind", r.kind);
-        j.addProperty("scope", r.scope == MemoryRecord.Scope.WORLD ? "world" : "private:" + (r.ownerName == null ? "?" : r.ownerName));
+        String scope;
+        if (r.scope == MemoryRecord.Scope.WORLD) scope = "world";
+        else if (viewer != null && !viewer.equals(r.owner)) scope = "shared_with_you_by:" + (r.ownerName == null ? "?" : r.ownerName);
+        else if (r.shared()) scope = "private_shared_with:" + sharedNames(eng, r);
+        else scope = "private:" + (r.ownerName == null ? "?" : r.ownerName);
+        j.addProperty("scope", scope);
         j.addProperty("text", r.text);
         j.addProperty("importance", r.importance);
         j.addProperty("when", age(r.created, now));
@@ -236,8 +292,21 @@ public final class ContextBuilder {
         return j;
     }
 
+    public static String sharedNames(WishEngine eng, MemoryRecord r) {
+        List<String> names = new ArrayList<>();
+        for (String u : r.sharedWith) {
+            var prof = eng.state().players.get(u);
+            names.add(prof == null || prof.name == null ? u.substring(0, Math.min(8, u.length())) : prof.name);
+        }
+        return String.join(",", names);
+    }
+
     /** 턴의 첫 developer 메시지. */
     public static String turnContext(WishEngine eng, TurnRequest req, Wish w, ServerPlayer p) {
+        return turnContext(eng, req, w, p, null);
+    }
+
+    public static String turnContext(WishEngine eng, TurnRequest req, Wish w, ServerPlayer p, MemoryQuery mq) {
         JsonObject o = new JsonObject();
         o.add("world", world(eng));
         if (p != null) o.add("player", player(eng, p, false));
@@ -249,6 +318,9 @@ public final class ContextBuilder {
             wj.addProperty("origin", w.origin);
             wj.addProperty("state", w.state.name());
             wj.addProperty("turns_so_far", w.turns);
+            if(w.buildPlan!=null) wj.add("build_plan",w.buildPlan.summary());
+            if (w.lastBuildPreview != null) wj.add("last_build_preview",w.lastBuildPreview.deepCopy());
+            if (w.lastBuildPreviewAttempt != null) wj.add("latest_preview_attempt",w.lastBuildPreviewAttempt.deepCopy());
             if (w.contract != null) {
                 JsonObject c = new JsonObject();
                 c.addProperty("terms", w.contract.terms);
@@ -285,7 +357,15 @@ public final class ContextBuilder {
         o.add("player_active_content", activeContent(eng, uuid));
         // 기억 검색: 소원 문장 + 마지막 메시지
         String query = (w == null ? "" : w.text) + " " + (req.message() == null ? "" : req.message()) + " " + (req.trigger() == null ? "" : req.trigger());
-        o.add("relevant_memories", memories(eng, query, uuid, AiConfig.get().memoryRetrieveCount));
+        o.add("relevant_memories", memories(eng, query, uuid, AiConfig.get().memoryRetrieveCount, mq));
+        if (mq != null) {
+            mq.query = query.strip();
+            mq.playerUuid = uuid;
+        }
+        if (uuid != null) {
+            var prof = eng.state().players.get(uuid);
+            if (prof != null && prof.memoryLocked) o.addProperty("memory_privacy", "locked: this player forbids sharing their private memories with anyone");
+        }
         // 이 플레이어의 최근 소원 (반복 행동 파악용)
         if (uuid != null) {
             JsonArray past = new JsonArray();
